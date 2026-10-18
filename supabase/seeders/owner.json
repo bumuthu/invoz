@@ -1,0 +1,121 @@
+{
+  "auth_users": [
+    { "ref": "ayesha", "email": "ayesha@raijam.lk", "name": "Ayesha Fernando" },
+    { "ref": "nimal", "email": "nimal@raijam.lk", "name": "Nimal Perera" },
+    { "ref": "dilani", "email": "dilani@raijam.lk", "name": "Dilani Jayasuriya" },
+    { "ref": "kasun", "email": "kasun@raijam.lk", "name": "Kasun Silva" },
+    { "ref": "advisor", "email": "advisor@taxdesk.lk", "name": "Tax Desk" }
+  ],
+  "organizations": [
+    {
+      "ref": "raijam",
+      "name": "Raijam Marketing",
+      "slug": "raijam",
+      "monthly_allowance": 5000
+    }
+  ],
+  "legal_entities": [
+    {
+      "ref": "raijam-entity",
+      "organization_id": "raijam",
+      "name": "Raijam Marketing Services (Pvt) Ltd",
+      "tin": "102345678"
+    }
+  ],
+  "branches": [
+    {
+      "ref": "branch-cmb",
+      "legal_entity_id": "raijam-entity",
+      "code": "CMB",
+      "name": "Colombo depot"
+    },
+    {
+      "ref": "branch-kdy",
+      "legal_entity_id": "raijam-entity",
+      "code": "KDY",
+      "name": "Kandy depot"
+    },
+    {
+      "ref": "branch-ho",
+      "legal_entity_id": "raijam-entity",
+      "code": "HO",
+      "name": "Head office"
+    }
+  ],
+  "memberships": [
+    { "user_id": "ayesha", "organization_id": "raijam", "role": "owner" },
+    { "user_id": "nimal", "organization_id": "raijam", "role": "admin" },
+    { "user_id": "dilani", "organization_id": "raijam", "role": "manager" },
+    { "user_id": "kasun", "organization_id": "raijam", "role": "staff" },
+    { "user_id": "advisor", "organization_id": "raijam", "role": "viewer" }
+  ],
+  "serial_counters": [
+    {
+      "branch_id": "branch-cmb",
+      "legal_entity_id": "raijam-entity",
+      "period": "26OCT",
+      "last_value": 42
+    },
+    {
+      "branch_id": "branch-kdy",
+      "legal_entity_id": "raijam-entity",
+      "period": "26OCT",
+      "last_value": 18
+    },
+    {
+      "branch_id": "branch-ho",
+      "legal_entity_id": "raijam-entity",
+      "period": "26OCT",
+      "last_value": 6
+    }
+  ],
+  "field_mappings": [
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 1 · Invoice no.",
+      "target_field": "Ignore"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 2 · Invoice date",
+      "target_field": "Invoice date"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 3 · Supply date",
+      "target_field": "Supply date"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 4 · Buyer TIN",
+      "target_field": "Buyer TIN"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 5 · Buyer name",
+      "target_field": "Buyer name"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 6 · Branch",
+      "target_field": "Branch code"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 7 · Net amount",
+      "target_field": "Net amount"
+    },
+    {
+      "legal_entity_id": "raijam-entity",
+      "source_column": "Column 8 · VAT",
+      "target_field": "VAT amount"
+    }
+  ],
+  "invoice_usage": [
+    {
+      "organization_id": "raijam",
+      "period": "2026-10-01",
+      "cleared_count": 1240
+    }
+  ]
+}

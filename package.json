@@ -1,0 +1,18 @@
+{
+  "name": "ramis-middleware",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "supabase"
+  ],
+  "scripts": {
+    "dev:portal": "npm run dev -w portal-app",
+    "dev:admin": "npm run dev -w admin-app",
+    "dev:landing": "npm run dev -w landing-app",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "migrate": "npm run migrate -w @ramis/supabase",
+    "seed": "npm run seed -w @ramis/supabase",
+    "provision": "npm run provision -w @ramis/deployment"
+  }
+}

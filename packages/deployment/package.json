@@ -1,0 +1,10 @@
+{
+  "name": "@ramis/deployment",
+  "private": true,
+  "scripts": {
+    "provision": "bash provision.sh",
+    "provision:s3": "bash s3.sh",
+    "provision:sqs": "bash sqs.sh",
+    "provision:lambda": "bash lambda.sh"
+  }
+}
