@@ -125,7 +125,8 @@ ramis-middleware
 │   └── admin-app            platform admin, port 3001
 ├── packages
 │   ├── common               @ramis/common
-│   ├── invoice-engine       Lambda worker
+│   └── invoice-engine       Lambda worker
+├── tools
 │   └── deployment           S3, SQS, and Lambda shell scripts
 └── supabase                 database, seed data, scripts
 ```
@@ -157,6 +158,6 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run typecheck` | Every workspace package |
 | `npm run migrate` | `supabase/scripts/migrate.ts` |
 | `npm run seed` | `supabase/scripts/seed.ts` |
-| `npm run provision` | `packages/deployment/provision.sh` |
+| `npm run provision` | `tools/deployment/provision.sh` |
 
-`npm run migrate` and `npm run seed` read `supabase/.env`. The portal reads `apps/portal-app/.env`. `npm run provision` reads `AWS_REGION`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`. Copy `packages/deployment/env.example` to set them.
+`npm run migrate` and `npm run seed` read `supabase/.env`. The portal reads `apps/portal-app/.env`. `npm run provision` reads `AWS_REGION`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`. Copy `tools/deployment/env.example` to set them.

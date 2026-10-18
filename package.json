@@ -4,12 +4,15 @@
   "workspaces": [
     "apps/*",
     "packages/*",
+    "tools/*",
     "supabase"
   ],
   "scripts": {
     "dev:portal": "npm run dev -w portal-app",
     "dev:admin": "npm run dev -w admin-app",
     "dev:landing": "npm run dev -w landing-app",
+    "dev:ramis": "npm run dev -w @ramis/engine",
+    "test:ramis": "npm run test -w @ramis/engine",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "migrate": "npm run migrate -w @ramis/supabase",
     "seed": "npm run seed -w @ramis/supabase",
