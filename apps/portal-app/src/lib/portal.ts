@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   formatGazetteSerial,
   portalRoleLabel,
@@ -18,6 +19,7 @@ import {
   type SerialCounterRow,
 } from "@ramis/common";
 import { supabase } from "@/lib/supabase";
+import { sessionSupabase } from "@/lib/session";
 import type { Invoice, InvoiceStatus, PortalData } from "@/lib/types";
 
 const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -114,9 +116,33 @@ async function requestedSlug(): Promise<string | null> {
 }
 
 export const loadPortal = cache(async (): Promise<PortalData> => {
+  const session = await sessionSupabase();
+  const {
+    data: { user },
+  } = await session.auth.getUser();
+  if (!user) {
+    redirect("/auth/login");
+  }
+
   const db = supabase();
   const slug = await requestedSlug();
-  const organizationResult = await db.from("organizations").select("*");
+  const ownMembershipResult = await db.from("memberships").select("*").eq("user_id", user.id);
+  const ownMemberships = rows<MembershipRow>(
+    ownMembershipResult.data as MembershipRow[] | null,
+    ownMembershipResult.error,
+    "memberships",
+  );
+  if (ownMemberships.length === 0) {
+    redirect("/auth/login?error=membership");
+  }
+
+  const organizationResult = await db
+    .from("organizations")
+    .select("*")
+    .in(
+      "id",
+      ownMemberships.map((membership) => membership.organization_id),
+    );
   const organizations = rows<OrganizationRow>(
     organizationResult.data as OrganizationRow[] | null,
     organizationResult.error,
@@ -124,7 +150,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
   ).filter((item) => (slug ? item.slug === slug : true));
   const organization = organizations[0];
   if (!organization) {
-    throw new Error(slug ? `No organization matches ${slug}` : "No organization is in the database");
+    redirect("/auth/login?error=membership");
   }
 
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost";
@@ -209,7 +235,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     })
     .sort((left, right) => portalRoles.indexOf(left.role) - portalRoles.indexOf(right.role));
 
-  const owner = users.find((user) => user.role === "owner") ?? users[0];
+  const owner = users.find((item) => item.email.toLowerCase() === (user.email ?? "").toLowerCase()) ?? users[0];
   const usage = [...usageRows].sort((left, right) => (left.period < right.period ? 1 : -1))[0];
 
   const invoices: Invoice[] = [

@@ -20,9 +20,11 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Initials from "@/components/Initials";
+import { browserSupabase } from "@/lib/supabase-browser";
 import type { PortalData } from "@/lib/types";
 
 const drawerWidth = 252;
@@ -140,9 +142,20 @@ function SidebarContent({
         ))}
       </Box>
       <Box sx={{ px: 2.5, py: 2.25 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color="text.secondary" display="block">
           {organization.host}
         </Typography>
+        <Button
+          size="small"
+          onClick={async () => {
+            await browserSupabase().auth.signOut();
+            router.push("/auth/login");
+            router.refresh();
+          }}
+          sx={{ mt: 1, px: 0, minWidth: 0 }}
+        >
+          Sign out
+        </Button>
       </Box>
     </Stack>
   );
