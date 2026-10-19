@@ -33,13 +33,16 @@ export function toApiGateway(result: ApiResult): {
   headers: Record<string, string>;
   body: string;
 } {
+  const type = result.headers["content-type"];
+  const body = result.body;
+  const raw = typeof body === "string" && Boolean(type) && !type.includes("json");
   return {
     statusCode: result.status,
     headers: {
-      "content-type": "application/json; charset=utf-8",
+      ...(raw ? {} : { "content-type": "application/json; charset=utf-8" }),
       ...result.headers,
     },
-    body: JSON.stringify(result.body),
+    body: raw ? body : JSON.stringify(body),
   };
 }
 

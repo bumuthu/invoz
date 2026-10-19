@@ -115,6 +115,7 @@ Local `npm run dev:ramis` uses that database when `RAMIS_DATABASE_URL` is set, a
 | Path | Role |
 | --- | --- |
 | `src/lambda.ts` | API Gateway entry. One handler for token, Schedule 01, Schedule 02, Schedule 04, and health. |
+| `openapi.yaml` | OpenAPI document. Served at `/openapi.yaml`. Swagger UI is at `/docs`. |
 | `src/server.ts` | Same routes for the local HTTP server. |
 | `src/postgres-store.ts` | Ledger reads and writes. |
 | `migrations/` | Engine tables. `npm run migrate` pushes them to `RAMIS_DATABASE_URL`. |

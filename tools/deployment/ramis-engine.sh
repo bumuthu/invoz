@@ -49,10 +49,11 @@ echo "bundling @ramis/engine"
     --format=cjs \
     --outfile="$BUILD_DIR/ramis-engine.js"
 )
+cp "$REPO_ROOT/tools/ramis-engine/openapi.yaml" "$BUILD_DIR/openapi.yaml"
 (
   cd "$BUILD_DIR"
   rm -f ramis-engine.zip
-  zip -q ramis-engine.zip ramis-engine.js
+  zip -q ramis-engine.zip ramis-engine.js openapi.yaml
 )
 
 ENV_FILE="$BUILD_DIR/ramis-engine-env.json"

@@ -1,15 +1,16 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import { requireBearer, issueToken, secretsMatch } from "./auth";
 import { Code, errorBody, RamisError } from "./errors";
 import type { ApiCall, ApiResult } from "./gateway";
 import { readBody, parseForm, parseJson, sendJson } from "./http";
 import { immutableInvoice, Ledger } from "./ledger";
 import { openStore } from "./open-store";
+import { docsPage, openApiDocument } from "./spec";
 import type { Settings } from "./settings";
 import type { Store } from "./store";
 import { parseAdjustment, parseInvoice, parseTaxPeriod, requireClientTin, requireIdempotencyKey } from "./validation";
 
-const EXEMPT = new Set(["/", "/health", "/_mock/reset"]);
+const EXEMPT = new Set(["/", "/health", "/docs", "/openapi.yaml", "/_mock/reset"]);
 
 export type App = {
   server: Server;
@@ -45,7 +46,7 @@ export async function createApp(
         }),
       )
       .then((result) => {
-        if (!res.headersSent) sendJson(res, result.status, result.body, result.headers);
+        if (!res.headersSent) writeResult(res, result);
       })
       .catch((error: unknown) => {
         if (res.headersSent) return;
@@ -88,13 +89,31 @@ async function dispatch(state: App, call: ApiCall): Promise<ApiResult> {
     return json(200, {
       name: "RAMIS Web API Mock Engine",
       version: "1.0.0",
-      health: "/health",
-      oauth: "POST /oauth/v2/token",
+        health: "/health",
+        docs: "/docs",
+        openapi: "/openapi.yaml",
+        oauth: "POST /oauth/v2/token",
       schedule01: "POST /api/v1/vat/schedule01/invoices",
       schedule04: "POST /api/v1/vat/schedule04/adjustments",
       schedule02: "GET /api/v1/vat/schedule02/purchases",
       approve: "POST /api/v1/vat/schedule02/approve",
     });
+  }
+
+  if (method === "GET" && path === "/openapi.yaml") {
+    return {
+      status: 200,
+      headers: { "content-type": "application/yaml; charset=utf-8" },
+      body: openApiDocument(),
+    };
+  }
+
+  if (method === "GET" && path === "/docs") {
+    return {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+      body: docsPage(),
+    };
   }
 
   if (method === "GET" && path === "/health") {
@@ -201,6 +220,16 @@ async function dispatch(state: App, call: ApiCall): Promise<ApiResult> {
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): ApiResult {
   return { status, headers, body };
+}
+
+function writeResult(res: ServerResponse, result: ApiResult): void {
+  const type = result.headers["content-type"];
+  if (typeof result.body === "string" && type && !type.includes("json")) {
+    res.writeHead(result.status, result.headers);
+    res.end(result.body);
+    return;
+  }
+  sendJson(res, result.status, result.body, result.headers);
 }
 
 function header(call: ApiCall, name: string): string | undefined {

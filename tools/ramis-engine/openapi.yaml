@@ -1,0 +1,783 @@
+openapi: 3.0.3
+info:
+  title: RAMIS Web API Mock Engine
+  version: 1.0.0
+  description: |
+    Stand-in for the RAMIS VAT Web API. Cleared invoices, adjustments, and Schedule 02 approvals are stored by this service.
+
+    Obtain a bearer token with `POST /oauth/v2/token`, then send `Authorization`, `X-Client-TIN`, and `X-Idempotency-Key` on each submission.
+  license:
+    name: Unlicensed
+servers:
+  - url: /
+    description: The host serving this document
+tags:
+  - name: Meta
+  - name: Auth
+  - name: Schedule 01
+  - name: Schedule 02
+  - name: Schedule 04
+paths:
+  /:
+    get:
+      tags: [Meta]
+      summary: Service index
+      operationId: getIndex
+      responses:
+        "200":
+          description: Route index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceIndex"
+  /health:
+    get:
+      tags: [Meta]
+      summary: Health
+      operationId: getHealth
+      responses:
+        "200":
+          description: Process is accepting requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /openapi.yaml:
+    get:
+      tags: [Meta]
+      summary: This OpenAPI document
+      operationId: getOpenApi
+      responses:
+        "200":
+          description: OpenAPI 3.0 document
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /docs:
+    get:
+      tags: [Meta]
+      summary: Hosted API documentation
+      operationId: getDocs
+      responses:
+        "200":
+          description: Swagger UI
+          content:
+            text/html:
+              schema:
+                type: string
+  /oauth/v2/token:
+    post:
+      tags: [Auth]
+      summary: Issue a client-credentials token
+      operationId: issueToken
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials]
+                client_id:
+                  type: string
+                  maxLength: 128
+                  description: Caller identifier. A 9-digit TIN is typical.
+                client_secret:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          description: Access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessToken"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/vat/schedule01/invoices:
+    post:
+      tags: [Schedule 01]
+      summary: Clear a tax invoice
+      operationId: clearInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClientTin"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Invoice"
+            example:
+              header:
+                serial_number: 26OCT_HQ01_1042
+                erp_reference: SAP-INV-990812
+                invoice_date: "2026-10-18"
+                supply_date: "2026-10-17"
+                invoice_type: STANDARD_TAX_INVOICE
+                place_of_supply: Colombo Distribution Depot
+              supplier:
+                tin: "104829102"
+                name: Lanka Industrial Supplies PLC
+                address: No. 45, Baseline Road, Colombo 09
+              purchaser:
+                tin: "709182341"
+                name: Ceylon Tea Marketing (Pvt) Ltd
+                address: No. 12, Galle Road, Colombo 03
+              currency_summary:
+                currency: LKR
+                exchange_rate: 1
+                total_value_excluding_vat: 1000000
+                vat_rate: 18
+                total_vat_amount: 180000
+                total_consideration_including_vat: 1180000
+              line_items:
+                - item_sequence: 1
+                  description: Corrugated Export Packaging Cartons 5-Ply
+                  quantity: 5000
+                  unit_of_measure: UNITS
+                  unit_price: 200
+                  line_amount_excluding_vat: 1000000
+                  vat_rate: 18
+                  vat_amount: 180000
+                  line_total_including_vat: 1180000
+      responses:
+        "201":
+          description: Invoice cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clearance"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/vat/schedule01/invoices/{serial_number}:
+    parameters:
+      - $ref: "#/components/parameters/SerialNumber"
+    put:
+      tags: [Schedule 01]
+      summary: Rejected. Cleared invoices are immutable.
+      operationId: updateInvoice
+      security:
+        - bearerAuth: []
+      responses:
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Schedule 01]
+      summary: Rejected. Cleared invoices are immutable.
+      operationId: patchInvoice
+      security:
+        - bearerAuth: []
+      responses:
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Schedule 01]
+      summary: Rejected. Cleared invoices are immutable.
+      operationId: deleteInvoice
+      security:
+        - bearerAuth: []
+      responses:
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/vat/schedule04/adjustments:
+    post:
+      tags: [Schedule 04]
+      summary: Clear a tax credit note or debit note
+      operationId: clearAdjustment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClientTin"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Adjustment"
+      responses:
+        "201":
+          description: Adjustment cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdjustmentClearance"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+  /api/v1/vat/schedule04/adjustments/{serial_number}:
+    parameters:
+      - $ref: "#/components/parameters/SerialNumber"
+    put:
+      tags: [Schedule 04]
+      summary: Rejected. Cleared adjustments are immutable.
+      operationId: updateAdjustment
+      security:
+        - bearerAuth: []
+      responses:
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Schedule 04]
+      summary: Rejected. Cleared adjustments are immutable.
+      operationId: patchAdjustment
+      security:
+        - bearerAuth: []
+      responses:
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Schedule 04]
+      summary: Rejected. Cleared adjustments are immutable.
+      operationId: deleteAdjustment
+      security:
+        - bearerAuth: []
+      responses:
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/vat/schedule02/purchases:
+    get:
+      tags: [Schedule 02]
+      summary: List purchases cleared against this buyer
+      operationId: listPurchases
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClientTin"
+        - name: tax_period
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+            example: "2026-10"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [UNAPPROVED, MATCHED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 500
+      responses:
+        "200":
+          description: Purchase page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchasePage"
+        "401":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+  /api/v1/vat/schedule02/approve:
+    post:
+      tags: [Schedule 02]
+      summary: Mark purchase records as matched
+      operationId: approvePurchases
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClientTin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalRequest"
+      responses:
+        "200":
+          description: Approval result. Partial batches still return 200.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalResult"
+        "401":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+  /_mock/reset:
+    post:
+      tags: [Meta]
+      summary: Clear the mock ledger
+      operationId: resetLedger
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ledger emptied
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [RESET]
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ClientTin:
+      name: X-Client-TIN
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]{9}$"
+      description: 9-digit TIN of the caller. For submissions this must be the supplier TIN. For Schedule 02 this is the buyer TIN.
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: UUID or 64-character SHA-256 hex digest. Reusing the key with the same body returns the original clearance. Reusing it with a different body returns 409.
+    SerialNumber:
+      name: serial_number
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    Error:
+      description: Request was rejected
+      headers:
+        Retry-After:
+          schema:
+            type: string
+          description: Present on 429 and 503 responses.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - RAMIS_ERR_001
+            - RAMIS_ERR_002
+            - RAMIS_ERR_003
+            - RAMIS_ERR_004
+            - RAMIS_ERR_005
+            - RAMIS_ERR_006
+            - RAMIS_ERR_007
+            - RAMIS_ERR_008
+            - RAMIS_ERR_009
+            - RAMIS_ERR_010
+            - RAMIS_SCHEMA
+            - RAMIS_AUTH
+        message:
+          type: string
+        field:
+          type: string
+    ServiceIndex:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        health:
+          type: string
+        docs:
+          type: string
+        openapi:
+          type: string
+        oauth:
+          type: string
+        schedule01:
+          type: string
+        schedule04:
+          type: string
+        schedule02:
+          type: string
+        approve:
+          type: string
+    Health:
+      type: object
+      required: [status, service, invoices, adjustments]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+        invoices:
+          type: integer
+        adjustments:
+          type: integer
+    AccessToken:
+      type: object
+      required: [access_token, token_type, expires_in, scope]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+        scope:
+          type: string
+    Party:
+      type: object
+      required: [tin, name, address]
+      properties:
+        tin:
+          type: string
+          pattern: "^[0-9]{9}$"
+        name:
+          type: string
+        address:
+          type: string
+    Invoice:
+      type: object
+      required: [header, supplier, purchaser, currency_summary, line_items]
+      properties:
+        header:
+          $ref: "#/components/schemas/InvoiceHeader"
+        supplier:
+          $ref: "#/components/schemas/Party"
+        purchaser:
+          $ref: "#/components/schemas/Party"
+        currency_summary:
+          $ref: "#/components/schemas/CurrencySummary"
+        line_items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/LineItem"
+    InvoiceHeader:
+      type: object
+      required: [serial_number, erp_reference, invoice_date, supply_date, invoice_type]
+      properties:
+        serial_number:
+          type: string
+          maxLength: 40
+          description: "YYMMM_QQQQ_XXXXX. The YYMMM prefix must match invoice_date."
+          example: 26OCT_HQ01_1042
+        erp_reference:
+          type: string
+        invoice_date:
+          type: string
+          format: date
+        supply_date:
+          type: string
+          format: date
+        invoice_type:
+          type: string
+          enum: [STANDARD_TAX_INVOICE, FINANCIAL_SERVICES, ZERO_RATED, EXEMPT]
+          description: Standard invoices use 18% VAT. Financial services use 20.5%. Zero-rated and exempt use 0%.
+        place_of_supply:
+          type: string
+    CurrencySummary:
+      type: object
+      required: [total_value_excluding_vat, total_vat_amount, total_consideration_including_vat]
+      properties:
+        currency:
+          type: string
+          default: LKR
+          minLength: 3
+          maxLength: 3
+        exchange_rate:
+          type: number
+          default: 1
+        total_value_excluding_vat:
+          type: number
+        vat_rate:
+          type: number
+        total_vat_amount:
+          type: number
+        total_consideration_including_vat:
+          type: number
+    LineItem:
+      type: object
+      required:
+        - item_sequence
+        - description
+        - quantity
+        - unit_of_measure
+        - unit_price
+        - line_amount_excluding_vat
+        - vat_rate
+        - vat_amount
+        - line_total_including_vat
+      properties:
+        item_sequence:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+        quantity:
+          type: number
+        unit_of_measure:
+          type: string
+        unit_price:
+          type: number
+        line_amount_excluding_vat:
+          type: number
+        vat_rate:
+          type: number
+        vat_amount:
+          type: number
+        line_total_including_vat:
+          type: number
+    Clearance:
+      type: object
+      required: [status, ramis_clearance_token, serial_number, supplier_tin, purchaser_tin, cleared_timestamp, qr_payload, warnings]
+      properties:
+        status:
+          type: string
+          enum: [CLEARED]
+        ramis_clearance_token:
+          type: string
+        serial_number:
+          type: string
+        supplier_tin:
+          type: string
+        purchaser_tin:
+          type: string
+        cleared_timestamp:
+          type: string
+          format: date-time
+        qr_payload:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    Adjustment:
+      type: object
+      required: [header, supplier, purchaser, adjustment_values]
+      properties:
+        header:
+          $ref: "#/components/schemas/AdjustmentHeader"
+        supplier:
+          type: object
+          required: [tin, name]
+          properties:
+            tin:
+              type: string
+              pattern: "^[0-9]{9}$"
+            name:
+              type: string
+            address:
+              type: string
+        purchaser:
+          type: object
+          required: [tin, name]
+          properties:
+            tin:
+              type: string
+              pattern: "^[0-9]{9}$"
+            name:
+              type: string
+            address:
+              type: string
+        adjustment_values:
+          $ref: "#/components/schemas/AdjustmentValues"
+    AdjustmentHeader:
+      type: object
+      required:
+        - adjustment_serial_number
+        - adjustment_type
+        - adjustment_date
+        - original_invoice_serial_number
+        - original_invoice_date
+        - adjustment_reason
+      properties:
+        adjustment_serial_number:
+          type: string
+          maxLength: 40
+        adjustment_type:
+          type: string
+          enum: [TAX_CREDIT_NOTE, TAX_DEBIT_NOTE]
+        adjustment_date:
+          type: string
+          format: date
+        original_invoice_serial_number:
+          type: string
+        original_invoice_date:
+          type: string
+          format: date
+        adjustment_reason:
+          type: string
+    AdjustmentValues:
+      type: object
+      required: [adjusted_value_excluding_vat, vat_rate, adjusted_vat_amount, adjusted_total_consideration]
+      properties:
+        adjusted_value_excluding_vat:
+          type: number
+        vat_rate:
+          type: number
+        adjusted_vat_amount:
+          type: number
+        adjusted_total_consideration:
+          type: number
+    AdjustmentClearance:
+      type: object
+      required: [status, ramis_adjustment_token, adjustment_serial_number, original_invoice_serial_number, cleared_timestamp]
+      properties:
+        status:
+          type: string
+          enum: [CLEARED]
+        ramis_adjustment_token:
+          type: string
+        adjustment_serial_number:
+          type: string
+        original_invoice_serial_number:
+          type: string
+        cleared_timestamp:
+          type: string
+          format: date-time
+    PurchasePage:
+      type: object
+      required: [tax_period, buyer_tin, total_records, records]
+      properties:
+        tax_period:
+          type: string
+        buyer_tin:
+          type: string
+        total_records:
+          type: integer
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/Purchase"
+    Purchase:
+      type: object
+      required:
+        - ramis_record_id
+        - supplier_tin
+        - supplier_name
+        - supplier_invoice_serial
+        - invoice_date
+        - supply_date
+        - value_excluding_vat
+        - vat_amount
+        - total_consideration
+        - submission_timestamp
+        - approval_status
+      properties:
+        ramis_record_id:
+          type: string
+        supplier_tin:
+          type: string
+        supplier_name:
+          type: string
+        supplier_invoice_serial:
+          type: string
+        invoice_date:
+          type: string
+          format: date
+        supply_date:
+          type: string
+          format: date
+        value_excluding_vat:
+          type: number
+        vat_amount:
+          type: number
+        total_consideration:
+          type: number
+        submission_timestamp:
+          type: string
+          format: date-time
+        approval_status:
+          type: string
+          enum: [PENDING_REVIEW, MATCHED]
+    ApprovalRequest:
+      type: object
+      required: [buyer_tin, tax_period, record_ids]
+      properties:
+        buyer_tin:
+          type: string
+          pattern: "^[0-9]{9}$"
+          description: Must equal X-Client-TIN.
+        tax_period:
+          type: string
+          example: "2026-10"
+        record_ids:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items:
+            type: string
+    ApprovalResult:
+      type: object
+      required: [status, records_approved, records_failed, status_updated_to, approval_batch_reference]
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, PARTIAL, FAILED]
+        records_approved:
+          type: integer
+        records_failed:
+          type: integer
+        status_updated_to:
+          type: string
+          enum: [Matched]
+        approval_batch_reference:
+          type: string
+        failures:
+          type: array
+          items:
+            type: object
+            required: [record_id, message]
+            properties:
+              record_id:
+                type: string
+              message:
+                type: string
