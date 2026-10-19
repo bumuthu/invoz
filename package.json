@@ -15,7 +15,9 @@
     "test:ramis": "npm run test -w @ramis/engine",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "migrate": "npm run migrate -w @ramis/supabase",
+    "migrate:ramis": "npm run migrate -w @ramis/engine",
     "seed": "npm run seed -w @ramis/supabase",
-    "provision": "npm run provision -w @ramis/deployment"
+    "provision": "npm run provision -w @ramis/deployment",
+    "provision:ramis": "npm run provision:ramis -w @ramis/deployment"
   }
 }

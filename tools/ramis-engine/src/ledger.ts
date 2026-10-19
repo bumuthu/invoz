@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Code, RamisError } from "./errors";
 import { fromCents } from "./money";
+import { MemoryStore, type InvoiceRecord, type Store, type StoreTx } from "./store";
 import type { NormalizedAdjustment, NormalizedInvoice } from "./validation";
 
 export type ClearanceResponse = {
@@ -45,70 +46,71 @@ export type ApprovalResult = {
   failures?: { record_id: string; message: string }[];
 };
 
-type InvoiceRecord = {
-  serialNumber: string;
-  hash: string;
-  supplierTin: string;
-  supplierName: string;
-  purchaserTin: string;
-  purchaserName: string;
-  invoiceDate: string;
-  supplyDate: string;
-  netCents: number;
-  vatCents: number;
-  totalCents: number;
-  vatRateBasisPoints: number;
-  recordId: string;
-  approvalStatus: "PENDING_REVIEW" | "MATCHED";
-  remainingVatCents: number;
-  clearedAt: string;
-  response: ClearanceResponse;
-};
-
-type AdjustmentRecord = {
-  serialNumber: string;
-  hash: string;
-  response: AdjustmentResponse;
-};
-
-type IdempotencyHit = {
-  hash: string;
-  response: ClearanceResponse | AdjustmentResponse;
-};
-
 export class Ledger {
-  private readonly invoices = new Map<string, InvoiceRecord>();
-  private readonly adjustments = new Map<string, AdjustmentRecord>();
-  private readonly records = new Map<string, InvoiceRecord>();
-  private readonly idempotency = new Map<string, IdempotencyHit>();
-  private nextRecord = 8_849_201;
-  private nextBatch = 88_310;
+  constructor(private readonly store: Store = new MemoryStore()) {}
 
-  get invoiceCount(): number {
-    return this.invoices.size;
+  invoiceCount(): Promise<number> {
+    return this.store.transaction((tx) => tx.invoiceCount());
   }
 
-  get adjustmentCount(): number {
-    return this.adjustments.size;
+  adjustmentCount(): Promise<number> {
+    return this.store.transaction((tx) => tx.adjustmentCount());
   }
 
-  reset(): void {
-    this.invoices.clear();
-    this.adjustments.clear();
-    this.records.clear();
-    this.idempotency.clear();
-    this.nextRecord = 8_849_201;
-    this.nextBatch = 88_310;
+  reset(): Promise<void> {
+    return this.store.transaction((tx) => tx.reset());
   }
 
-  clearInvoice(invoice: NormalizedInvoice, idempotencyKey: string): ClearanceResponse {
-    const replay = this.takeReplay<ClearanceResponse>("invoice", invoice.supplier.tin, idempotencyKey, invoice.hash);
+  clearInvoice(invoice: NormalizedInvoice, idempotencyKey: string): Promise<ClearanceResponse> {
+    return this.store.transaction((tx) => this.clearInvoiceOn(tx, invoice, idempotencyKey));
+  }
+
+  clearAdjustment(adjustment: NormalizedAdjustment, idempotencyKey: string): Promise<AdjustmentResponse> {
+    return this.store.transaction((tx) => this.clearAdjustmentOn(tx, adjustment, idempotencyKey));
+  }
+
+  async purchases(
+    buyerTin: string,
+    taxPeriod: string,
+    status: "UNAPPROVED" | "MATCHED" | undefined,
+    page: number,
+    pageSize: number,
+  ): Promise<{ total: number; records: PurchaseRecord[] }> {
+    const wanted = status === "UNAPPROVED" ? "PENDING_REVIEW" : status === "MATCHED" ? "MATCHED" : undefined;
+    const pageResult = await this.store.transaction((tx) => tx.purchases(buyerTin, taxPeriod, wanted, page, pageSize));
+    return {
+      total: pageResult.total,
+      records: pageResult.records.map(purchaseRecord),
+    };
+  }
+
+  approve(buyerTin: string, taxPeriod: string, recordIds: string[]): Promise<ApprovalResult> {
+    return this.store.transaction((tx) => this.approveOn(tx, buyerTin, taxPeriod, recordIds));
+  }
+
+  hasInvoice(serialNumber: string): Promise<boolean> {
+    return this.store.transaction((tx) => tx.hasInvoice(serialNumber));
+  }
+
+  hasAdjustment(serialNumber: string): Promise<boolean> {
+    return this.store.transaction((tx) => tx.hasAdjustment(serialNumber));
+  }
+
+  private async clearInvoiceOn(
+    tx: StoreTx,
+    invoice: NormalizedInvoice,
+    idempotencyKey: string,
+  ): Promise<ClearanceResponse> {
+    await tx.lock(`idempotency:invoice:${invoice.supplier.tin}:${idempotencyKey}`);
+    await tx.lock(`serial:${invoice.serialNumber}`);
+
+    const replay = await takeReplay<ClearanceResponse>(tx, "invoice", invoice.supplier.tin, idempotencyKey, invoice.hash);
     if (replay) return replay;
 
-    const existing = this.invoices.get(invoice.serialNumber);
+    const existing = await tx.invoice(invoice.serialNumber);
     if (existing) {
       if (existing.hash === invoice.hash) {
-        this.remember("invoice", invoice.supplier.tin, idempotencyKey, invoice.hash, existing.response);
+        await remember(tx, "invoice", invoice.supplier.tin, idempotencyKey, invoice.hash, existing.response);
         return existing.response;
       }
       throw new RamisError(409, Code.IMMUTABLE, immutableInvoice(invoice.serialNumber), "header.serial_number");
@@ -139,20 +141,28 @@ export class Ledger {
       vatCents: invoice.vatCents,
       totalCents: invoice.totalCents,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
-      recordId: `REC-${this.nextRecord++}`,
+      recordId: `REC-${await tx.allocateRecordId()}`,
       approvalStatus: "PENDING_REVIEW",
       remainingVatCents: invoice.vatCents,
       clearedAt,
       response,
     };
-    this.invoices.set(record.serialNumber, record);
-    this.records.set(record.recordId, record);
-    this.remember("invoice", invoice.supplier.tin, idempotencyKey, invoice.hash, response);
+    await tx.insertInvoice(record);
+    await remember(tx, "invoice", invoice.supplier.tin, idempotencyKey, invoice.hash, response);
     return response;
   }
 
-  clearAdjustment(adjustment: NormalizedAdjustment, idempotencyKey: string): AdjustmentResponse {
-    const replay = this.takeReplay<AdjustmentResponse>(
+  private async clearAdjustmentOn(
+    tx: StoreTx,
+    adjustment: NormalizedAdjustment,
+    idempotencyKey: string,
+  ): Promise<AdjustmentResponse> {
+    await tx.lock(`idempotency:adjustment:${adjustment.supplier.tin}:${idempotencyKey}`);
+    await tx.lock(`serial:${adjustment.serialNumber}`);
+    await tx.lock(`serial:${adjustment.originalSerialNumber}`);
+
+    const replay = await takeReplay<AdjustmentResponse>(
+      tx,
       "adjustment",
       adjustment.supplier.tin,
       idempotencyKey,
@@ -160,10 +170,10 @@ export class Ledger {
     );
     if (replay) return replay;
 
-    const existing = this.adjustments.get(adjustment.serialNumber);
+    const existing = await tx.adjustment(adjustment.serialNumber);
     if (existing) {
       if (existing.hash === adjustment.hash) {
-        this.remember("adjustment", adjustment.supplier.tin, idempotencyKey, adjustment.hash, existing.response);
+        await remember(tx, "adjustment", adjustment.supplier.tin, idempotencyKey, adjustment.hash, existing.response);
         return existing.response;
       }
       throw new RamisError(
@@ -174,7 +184,7 @@ export class Ledger {
       );
     }
 
-    const invoice = this.invoices.get(adjustment.originalSerialNumber);
+    const invoice = await tx.invoice(adjustment.originalSerialNumber);
     if (!invoice) {
       throw new RamisError(
         404,
@@ -221,6 +231,7 @@ export class Ledger {
     } else {
       invoice.remainingVatCents += adjustment.vatCents;
     }
+    await tx.saveInvoice(invoice);
 
     const clearedAt = timestamp();
     const response: AdjustmentResponse = {
@@ -230,43 +241,21 @@ export class Ledger {
       original_invoice_serial_number: adjustment.originalSerialNumber,
       cleared_timestamp: clearedAt,
     };
-    this.adjustments.set(adjustment.serialNumber, { serialNumber: adjustment.serialNumber, hash: adjustment.hash, response });
-    this.remember("adjustment", adjustment.supplier.tin, idempotencyKey, adjustment.hash, response);
+    await tx.insertAdjustment({ serialNumber: adjustment.serialNumber, hash: adjustment.hash, response });
+    await remember(tx, "adjustment", adjustment.supplier.tin, idempotencyKey, adjustment.hash, response);
     return response;
   }
 
-  purchases(
+  private async approveOn(
+    tx: StoreTx,
     buyerTin: string,
     taxPeriod: string,
-    status: "UNAPPROVED" | "MATCHED" | undefined,
-    page: number,
-    pageSize: number,
-  ): { total: number; records: PurchaseRecord[] } {
-    const wanted = status === "UNAPPROVED" ? "PENDING_REVIEW" : status === "MATCHED" ? "MATCHED" : undefined;
-    const matched = [...this.invoices.values()]
-      .filter((invoice) => invoice.purchaserTin === buyerTin && invoice.invoiceDate.slice(0, 7) === taxPeriod)
-      .filter((invoice) => (wanted ? invoice.approvalStatus === wanted : true))
-      .sort((left, right) => left.clearedAt.localeCompare(right.clearedAt) || left.recordId.localeCompare(right.recordId));
-    const start = (page - 1) * pageSize;
-    return {
-      total: matched.length,
-      records: matched.slice(start, start + pageSize).map((invoice) => ({
-        ramis_record_id: invoice.recordId,
-        supplier_tin: invoice.supplierTin,
-        supplier_name: invoice.supplierName,
-        supplier_invoice_serial: invoice.serialNumber,
-        invoice_date: invoice.invoiceDate,
-        supply_date: invoice.supplyDate,
-        value_excluding_vat: fromCents(invoice.netCents),
-        vat_amount: fromCents(invoice.vatCents),
-        total_consideration: fromCents(invoice.totalCents),
-        submission_timestamp: invoice.clearedAt,
-        approval_status: invoice.approvalStatus,
-      })),
-    };
-  }
+    recordIds: string[],
+  ): Promise<ApprovalResult> {
+    for (const recordId of [...new Set(recordIds)].sort()) {
+      await tx.lock(`record:${recordId}`);
+    }
 
-  approve(buyerTin: string, taxPeriod: string, recordIds: string[]): ApprovalResult {
     const seen = new Set<string>();
     const failures: { record_id: string; message: string }[] = [];
     let approved = 0;
@@ -277,7 +266,7 @@ export class Ledger {
         continue;
       }
       seen.add(recordId);
-      const invoice = this.records.get(recordId);
+      const invoice = await tx.invoiceByRecord(recordId);
       if (!invoice || invoice.purchaserTin !== buyerTin) {
         failures.push({ record_id: recordId, message: "Record was not found for this purchaser" });
         continue;
@@ -287,6 +276,7 @@ export class Ledger {
         continue;
       }
       invoice.approvalStatus = "MATCHED";
+      await tx.saveInvoice(invoice);
       approved += 1;
     }
 
@@ -297,48 +287,58 @@ export class Ledger {
       records_approved: approved,
       records_failed: failed,
       status_updated_to: "Matched",
-      approval_batch_reference: `BAT-${stamp}-${this.nextBatch++}`,
+      approval_batch_reference: `BAT-${stamp}-${await tx.allocateBatchId()}`,
     };
     if (failures.length > 0) result.failures = failures;
     return result;
   }
+}
 
-  hasInvoice(serialNumber: string): boolean {
-    return this.invoices.has(serialNumber);
-  }
+function purchaseRecord(invoice: InvoiceRecord): PurchaseRecord {
+  return {
+    ramis_record_id: invoice.recordId,
+    supplier_tin: invoice.supplierTin,
+    supplier_name: invoice.supplierName,
+    supplier_invoice_serial: invoice.serialNumber,
+    invoice_date: invoice.invoiceDate,
+    supply_date: invoice.supplyDate,
+    value_excluding_vat: fromCents(invoice.netCents),
+    vat_amount: fromCents(invoice.vatCents),
+    total_consideration: fromCents(invoice.totalCents),
+    submission_timestamp: invoice.clearedAt,
+    approval_status: invoice.approvalStatus,
+  };
+}
 
-  hasAdjustment(serialNumber: string): boolean {
-    return this.adjustments.has(serialNumber);
+async function takeReplay<T extends ClearanceResponse | AdjustmentResponse>(
+  tx: StoreTx,
+  bucket: string,
+  tin: string,
+  key: string,
+  hash: string,
+): Promise<T | undefined> {
+  const prior = await tx.idempotency(bucket, tin, key);
+  if (!prior) return undefined;
+  if (prior.hash !== hash) {
+    throw new RamisError(
+      409,
+      Code.IMMUTABLE,
+      "X-Idempotency-Key is already bound to a different submission",
+      "X-Idempotency-Key",
+    );
   }
+  return prior.response as T;
+}
 
-  private takeReplay<T extends ClearanceResponse | AdjustmentResponse>(
-    bucket: string,
-    tin: string,
-    key: string,
-    hash: string,
-  ): T | undefined {
-    const prior = this.idempotency.get(`${bucket}:${tin}:${key}`);
-    if (!prior) return undefined;
-    if (prior.hash !== hash) {
-      throw new RamisError(
-        409,
-        Code.IMMUTABLE,
-        "X-Idempotency-Key is already bound to a different submission",
-        "X-Idempotency-Key",
-      );
-    }
-    return prior.response as T;
-  }
-
-  private remember(
-    bucket: string,
-    tin: string,
-    key: string,
-    hash: string,
-    response: ClearanceResponse | AdjustmentResponse,
-  ): void {
-    this.idempotency.set(`${bucket}:${tin}:${key}`, { hash, response });
-  }
+function remember(
+  tx: StoreTx,
+  bucket: string,
+  tin: string,
+  key: string,
+  hash: string,
+  response: ClearanceResponse | AdjustmentResponse,
+): Promise<void> {
+  return tx.remember(bucket, tin, key, hash, response);
 }
 
 export function immutableInvoice(serialNumber: string): string {

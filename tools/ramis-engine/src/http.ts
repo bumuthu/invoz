@@ -18,11 +18,13 @@ export function sendJson(res: ServerResponse, status: number, body: unknown, hea
 }
 
 export async function readJson(req: IncomingMessage): Promise<unknown> {
-  const type = header(req, "content-type") ?? "";
-  if (!type.toLowerCase().includes("application/json")) {
+  return parseJson(header(req, "content-type"), await readBody(req));
+}
+
+export function parseJson(contentType: string | undefined, raw: string): unknown {
+  if (!(contentType ?? "").toLowerCase().includes("application/json")) {
     throw new RamisError(415, Code.SCHEMA, "Content-Type must be application/json", "Content-Type");
   }
-  const raw = await readBody(req);
   if (raw.trim() === "") throw new RamisError(400, Code.SCHEMA, "Request body is required");
   try {
     return JSON.parse(raw) as unknown;
@@ -32,14 +34,17 @@ export async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 export async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
-  const type = header(req, "content-type") ?? "";
-  if (!type.toLowerCase().includes("application/x-www-form-urlencoded")) {
-    throw new RamisError(415, Code.SCHEMA, "Content-Type must be application/x-www-form-urlencoded", "Content-Type");
-  }
-  return new URLSearchParams(await readBody(req));
+  return parseForm(header(req, "content-type"), await readBody(req));
 }
 
-async function readBody(req: IncomingMessage): Promise<string> {
+export function parseForm(contentType: string | undefined, raw: string): URLSearchParams {
+  if (!(contentType ?? "").toLowerCase().includes("application/x-www-form-urlencoded")) {
+    throw new RamisError(415, Code.SCHEMA, "Content-Type must be application/x-www-form-urlencoded", "Content-Type");
+  }
+  return new URLSearchParams(raw);
+}
+
+export async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {

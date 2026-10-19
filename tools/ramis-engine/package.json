@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",
     "start": "node --import tsx src/index.ts",
+    "migrate": "node --env-file=.env --import tsx scripts/migrate.ts",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^22.18.6",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
   }
 }

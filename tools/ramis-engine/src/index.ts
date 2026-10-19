@@ -2,7 +2,7 @@ import { createApp } from "./server";
 import { settingsFromEnv } from "./settings";
 
 const settings = settingsFromEnv();
-const { server } = createApp(settings);
+const { server } = await createApp(settings);
 
 server.on("error", (error) => {
   console.error(error);

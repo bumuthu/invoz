@@ -97,16 +97,15 @@ echo "bundling @ramis/invoice-engine"
 ENV_FILE="$BUILD_DIR/lambda-env.json"
 ENV_FILE="$ENV_FILE" python3 - <<'PY'
 import json, os
+variables = {
+    "SUPABASE_URL": os.environ["SUPABASE_URL"],
+    "SUPABASE_SERVICE_ROLE_KEY": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+}
+api = os.environ.get("RAMIS_API_URL", "").strip()
+if api:
+    variables["RAMIS_API_URL"] = api
 with open(os.environ["ENV_FILE"], "w") as handle:
-    json.dump(
-        {
-            "Variables": {
-                "SUPABASE_URL": os.environ["SUPABASE_URL"],
-                "SUPABASE_SERVICE_ROLE_KEY": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-            }
-        },
-        handle,
-    )
+    json.dump({"Variables": variables}, handle)
 PY
 
 if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >/dev/null 2>&1; then

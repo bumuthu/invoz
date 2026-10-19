@@ -24,6 +24,7 @@ export function testSettings(overrides: Partial<Settings> = {}): Settings {
     approvalBatchMax: 5000,
     host: "127.0.0.1",
     port: 0,
+    databaseUrl: "",
     ...overrides,
   };
 }
@@ -32,7 +33,7 @@ export async function withServer(
   run: (session: Session) => Promise<void>,
   options: { settings?: Partial<Settings>; sleep?: (seconds: number) => Promise<void> } = {},
 ): Promise<void> {
-  const app = createApp(testSettings(options.settings), { sleep: options.sleep });
+  const app = await createApp(testSettings(options.settings), { sleep: options.sleep });
   await new Promise<void>((resolve, reject) => {
     app.server.once("error", reject);
     app.server.listen(0, "127.0.0.1", () => {

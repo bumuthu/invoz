@@ -1,9 +1,12 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type Server } from "node:http";
 import { requireBearer, issueToken, secretsMatch } from "./auth";
 import { Code, errorBody, RamisError } from "./errors";
-import { header, readForm, readJson, sendJson } from "./http";
+import type { ApiCall, ApiResult } from "./gateway";
+import { readBody, parseForm, parseJson, sendJson } from "./http";
 import { immutableInvoice, Ledger } from "./ledger";
+import { openStore } from "./open-store";
 import type { Settings } from "./settings";
+import type { Store } from "./store";
 import { parseAdjustment, parseInvoice, parseTaxPeriod, requireClientTin, requireIdempotencyKey } from "./validation";
 
 const EXEMPT = new Set(["/", "/health", "/_mock/reset"]);
@@ -12,45 +15,68 @@ export type App = {
   server: Server;
   ledger: Ledger;
   settings: Settings;
-};
-
-type State = App & {
   limiter: RateLimiter;
   sleep: (seconds: number) => Promise<void>;
 };
 
-export function createApp(settings: Settings, hooks: { sleep?: (seconds: number) => Promise<void> } = {}): App {
-  const state: State = {
+export async function createApp(
+  settings: Settings,
+  hooks: { sleep?: (seconds: number) => Promise<void>; store?: Store } = {},
+): Promise<App> {
+  const store = hooks.store ?? (await openStore(settings));
+  const state: App = {
     settings,
-    ledger: new Ledger(),
+    ledger: new Ledger(store),
     limiter: new RateLimiter(settings.rateLimit, settings.rateWindowSeconds * 1000),
     sleep: hooks.sleep ?? ((seconds) => new Promise((resolve) => setTimeout(resolve, seconds * 1000))),
     server: undefined as unknown as Server,
   };
 
   const server = createServer((req, res) => {
-    dispatch(state, req, res).catch((error: unknown) => {
-      if (res.headersSent) return;
-      if (error instanceof RamisError) {
-        sendJson(res, error.status, errorBody(error), error.headers);
-        return;
-      }
-      console.error(error);
-      sendJson(res, 500, { code: Code.SCHEMA, message: "Unexpected mock engine failure" });
-    });
+    readBody(req)
+      .then((body) =>
+        handleRequest(state, {
+          method: req.method ?? "GET",
+          path: new URL(req.url ?? "/", "http://127.0.0.1").pathname,
+          query: new URL(req.url ?? "/", "http://127.0.0.1").search.replace(/^\?/, ""),
+          headers: flattenHeaders(req.headers),
+          body,
+          remoteAddress: req.socket.remoteAddress ?? "local",
+        }),
+      )
+      .then((result) => {
+        if (!res.headersSent) sendJson(res, result.status, result.body, result.headers);
+      })
+      .catch((error: unknown) => {
+        if (res.headersSent) return;
+        console.error(error);
+        sendJson(res, 500, { code: Code.SCHEMA, message: "Unexpected mock engine failure" });
+      });
   });
   state.server = server;
   return state;
 }
 
-async function dispatch(state: State, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const url = new URL(req.url ?? "/", "http://127.0.0.1");
+export async function handleRequest(state: App, call: ApiCall): Promise<ApiResult> {
+  try {
+    return await dispatch(state, call);
+  } catch (error) {
+    if (error instanceof RamisError) {
+      return { status: error.status, headers: error.headers, body: errorBody(error) };
+    }
+    console.error(error);
+    return { status: 500, headers: {}, body: { code: Code.SCHEMA, message: "Unexpected mock engine failure" } };
+  }
+}
+
+async function dispatch(state: App, call: ApiCall): Promise<ApiResult> {
+  const url = new URL(`${call.path}${call.query ? `?${call.query}` : ""}`, "http://127.0.0.1");
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
-  const method = (req.method ?? "GET").toUpperCase();
+  const method = call.method.toUpperCase();
 
   if (!EXEMPT.has(path)) {
-    await applyChaos(state, req);
-    const bucket = `${req.socket.remoteAddress ?? "local"}:${header(req, "x-client-tin") ?? "anon"}`;
+    await applyChaos(state, call);
+    const bucket = `${call.remoteAddress}:${header(call, "x-client-tin") ?? "anon"}`;
     if (!state.limiter.allow(bucket)) {
       throw new RamisError(429, Code.THROTTLE, "Request rate exceeds the mock throughput threshold", undefined, {
         "retry-after": String(state.settings.rateWindowSeconds),
@@ -59,7 +85,7 @@ async function dispatch(state: State, req: IncomingMessage, res: ServerResponse)
   }
 
   if (method === "GET" && path === "/") {
-    sendJson(res, 200, {
+    return json(200, {
       name: "RAMIS Web API Mock Engine",
       version: "1.0.0",
       health: "/health",
@@ -69,29 +95,26 @@ async function dispatch(state: State, req: IncomingMessage, res: ServerResponse)
       schedule02: "GET /api/v1/vat/schedule02/purchases",
       approve: "POST /api/v1/vat/schedule02/approve",
     });
-    return;
   }
 
   if (method === "GET" && path === "/health") {
-    sendJson(res, 200, {
+    return json(200, {
       status: "ok",
       service: "ramis-mock",
-      invoices: state.ledger.invoiceCount,
-      adjustments: state.ledger.adjustmentCount,
+      invoices: await state.ledger.invoiceCount(),
+      adjustments: await state.ledger.adjustmentCount(),
     });
-    return;
   }
 
   if (method === "POST" && path === "/_mock/reset") {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    state.ledger.reset();
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    await state.ledger.reset();
     state.limiter.reset();
-    sendJson(res, 200, { status: "RESET" });
-    return;
+    return json(200, { status: "RESET" });
   }
 
   if (method === "POST" && path === "/oauth/v2/token") {
-    const form = await readForm(req);
+    const form = parseForm(header(call, "content-type"), call.body);
     const grantType = form.get("grant_type") ?? "";
     const clientId = (form.get("client_id") ?? "").trim();
     const clientSecret = form.get("client_secret") ?? "";
@@ -104,31 +127,28 @@ async function dispatch(state: State, req: IncomingMessage, res: ServerResponse)
     if (!secretsMatch(clientSecret, state.settings.clientSecret)) {
       throw new RamisError(401, Code.AUTH, "client_secret is not valid", "client_secret");
     }
-    sendJson(res, 200, issueToken(clientId, state.settings.clientSecret, state.settings.tokenTtlSeconds));
-    return;
+    return json(200, issueToken(clientId, state.settings.clientSecret, state.settings.tokenTtlSeconds));
   }
 
   if (method === "POST" && path === "/api/v1/vat/schedule01/invoices") {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    const clientTin = requireClientTin(header(req, "x-client-tin"));
-    const idempotencyKey = requireIdempotencyKey(header(req, "x-idempotency-key"));
-    const invoice = parseInvoice(await readJson(req), clientTin);
-    sendJson(res, 201, state.ledger.clearInvoice(invoice, idempotencyKey));
-    return;
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    const clientTin = requireClientTin(header(call, "x-client-tin"));
+    const idempotencyKey = requireIdempotencyKey(header(call, "x-idempotency-key"));
+    const invoice = parseInvoice(parseJson(header(call, "content-type"), call.body), clientTin);
+    return json(201, await state.ledger.clearInvoice(invoice, idempotencyKey));
   }
 
   if (method === "POST" && path === "/api/v1/vat/schedule04/adjustments") {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    const clientTin = requireClientTin(header(req, "x-client-tin"));
-    const idempotencyKey = requireIdempotencyKey(header(req, "x-idempotency-key"));
-    const adjustment = parseAdjustment(await readJson(req), clientTin);
-    sendJson(res, 201, state.ledger.clearAdjustment(adjustment, idempotencyKey));
-    return;
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    const clientTin = requireClientTin(header(call, "x-client-tin"));
+    const idempotencyKey = requireIdempotencyKey(header(call, "x-idempotency-key"));
+    const adjustment = parseAdjustment(parseJson(header(call, "content-type"), call.body), clientTin);
+    return json(201, await state.ledger.clearAdjustment(adjustment, idempotencyKey));
   }
 
   if (method === "GET" && path === "/api/v1/vat/schedule02/purchases") {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    const buyerTin = requireClientTin(header(req, "x-client-tin"));
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    const buyerTin = requireClientTin(header(call, "x-client-tin"));
     const taxPeriod = parseTaxPeriod(url.searchParams.get("tax_period"), "tax_period");
     const status = parsePurchaseStatus(url.searchParams.get("status"));
     const page = positiveInt(url.searchParams.get("page"), "page", 1);
@@ -136,29 +156,27 @@ async function dispatch(state: State, req: IncomingMessage, res: ServerResponse)
     if (pageSize > state.settings.pageSizeMax) {
       throw new RamisError(422, Code.SCHEMA, `page_size cannot exceed ${state.settings.pageSizeMax}`, "page_size");
     }
-    const { total, records } = state.ledger.purchases(buyerTin, taxPeriod, status, page, pageSize);
-    sendJson(res, 200, { tax_period: taxPeriod, buyer_tin: buyerTin, total_records: total, records });
-    return;
+    const { total, records } = await state.ledger.purchases(buyerTin, taxPeriod, status, page, pageSize);
+    return json(200, { tax_period: taxPeriod, buyer_tin: buyerTin, total_records: total, records });
   }
 
   if (method === "POST" && path === "/api/v1/vat/schedule02/approve") {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    const clientTin = requireClientTin(header(req, "x-client-tin"));
-    const body = asRecord(await readJson(req));
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    const clientTin = requireClientTin(header(call, "x-client-tin"));
+    const body = asRecord(parseJson(header(call, "content-type"), call.body));
     const buyerTin = requireClientTin(typeof body.buyer_tin === "number" ? String(body.buyer_tin) : stringOrUndefined(body.buyer_tin));
     if (buyerTin !== clientTin) {
       throw new RamisError(422, Code.TIN, "buyer_tin must match X-Client-TIN", "buyer_tin");
     }
     const taxPeriod = parseTaxPeriod(body.tax_period, "tax_period");
     const recordIds = readRecordIds(body.record_ids, state.settings.approvalBatchMax);
-    sendJson(res, 200, state.ledger.approve(buyerTin, taxPeriod, recordIds));
-    return;
+    return json(200, await state.ledger.approve(buyerTin, taxPeriod, recordIds));
   }
 
   const invoiceSerial = serialParam(path, "/api/v1/vat/schedule01/invoices/");
   if (invoiceSerial && (method === "PUT" || method === "PATCH" || method === "DELETE")) {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    if (!state.ledger.hasInvoice(invoiceSerial)) {
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    if (!(await state.ledger.hasInvoice(invoiceSerial))) {
       throw new RamisError(404, Code.SCHEMA, `Invoice '${invoiceSerial}' was not found`);
     }
     throw new RamisError(409, Code.IMMUTABLE, immutableInvoice(invoiceSerial), "header.serial_number");
@@ -166,8 +184,8 @@ async function dispatch(state: State, req: IncomingMessage, res: ServerResponse)
 
   const adjustmentSerial = serialParam(path, "/api/v1/vat/schedule04/adjustments/");
   if (adjustmentSerial && (method === "PUT" || method === "PATCH" || method === "DELETE")) {
-    requireBearer(header(req, "authorization"), state.settings.clientSecret);
-    if (!state.ledger.hasAdjustment(adjustmentSerial)) {
+    requireBearer(header(call, "authorization"), state.settings.clientSecret);
+    if (!(await state.ledger.hasAdjustment(adjustmentSerial))) {
       throw new RamisError(404, Code.SCHEMA, `Adjustment '${adjustmentSerial}' was not found`);
     }
     throw new RamisError(
@@ -178,11 +196,27 @@ async function dispatch(state: State, req: IncomingMessage, res: ServerResponse)
     );
   }
 
-  sendJson(res, 404, { code: Code.SCHEMA, message: `No ${method} ${path}` });
+  return json(404, { code: Code.SCHEMA, message: `No ${method} ${path}` });
 }
 
-async function applyChaos(state: State, req: IncomingMessage): Promise<void> {
-  const headerDelay = header(req, "x-mock-delay");
+function json(status: number, body: unknown, headers: Record<string, string> = {}): ApiResult {
+  return { status, headers, body };
+}
+
+function header(call: ApiCall, name: string): string | undefined {
+  return call.headers[name.toLowerCase()];
+}
+
+function flattenHeaders(headers: NodeJS.Dict<string | string[] | undefined>): Record<string, string | undefined> {
+  const flat: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    flat[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
+  }
+  return flat;
+}
+
+async function applyChaos(state: App, call: ApiCall): Promise<void> {
+  const headerDelay = header(call, "x-mock-delay");
   let delay = state.settings.defaultDelaySeconds;
   if (headerDelay !== undefined) {
     if (!/^\d+$/.test(headerDelay)) {
@@ -200,7 +234,7 @@ async function applyChaos(state: State, req: IncomingMessage): Promise<void> {
   }
   if (delay > 0) await state.sleep(delay);
 
-  const requested = (header(req, "x-mock-chaos") ?? "").trim().toLowerCase();
+  const requested = (header(call, "x-mock-chaos") ?? "").trim().toLowerCase();
   if (requested && requested !== "outage" && requested !== "throttle") {
     throw new RamisError(422, Code.SCHEMA, "X-Mock-Chaos must be outage or throttle", "X-Mock-Chaos");
   }

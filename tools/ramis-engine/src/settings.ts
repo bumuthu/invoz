@@ -12,6 +12,7 @@ export type Settings = {
   approvalBatchMax: number;
   host: string;
   port: number;
+  databaseUrl: string;
 };
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -43,5 +44,6 @@ export function settingsFromEnv(env: NodeJS.ProcessEnv = process.env): Settings 
     approvalBatchMax: integer(env, "RAMIS_MOCK_APPROVAL_BATCH_MAX", 5000),
     host: env.HOST?.trim() || "127.0.0.1",
     port: integer(env, "PORT", 8090),
+    databaseUrl: env.RAMIS_DATABASE_URL?.trim() || "",
   };
 }
