@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDemo } from "@/components/DemoProvider";
 import Icon from "@/components/Icon";
 import Logo from "@/components/Logo";
 
@@ -12,6 +13,7 @@ const links = [
 
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const { openDemo } = useDemo();
 
   useEffect(() => {
     if (!open) return;
@@ -44,9 +46,16 @@ export default function Header() {
               {link.label}
             </a>
           ))}
-          <a className="btn btn-accent nav-cta" href="/#diagnostic" onClick={() => setOpen(false)}>
+          <button
+            type="button"
+            className="btn btn-accent nav-cta"
+            onClick={() => {
+              setOpen(false);
+              openDemo();
+            }}
+          >
             Book a demo
-          </a>
+          </button>
         </nav>
       </div>
     </header>

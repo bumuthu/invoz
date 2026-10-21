@@ -1,3 +1,4 @@
+import BookDemoButton from "@/components/BookDemoButton";
 import Bridge from "@/components/Bridge";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
@@ -147,9 +148,7 @@ export default function LandingHome() {
             </div>
             <Bridge />
             <div className="hero-actions">
-              <a className="btn btn-accent" href="#diagnostic">
-                Book a demo
-              </a>
+              <BookDemoButton className="btn btn-accent">Book a demo</BookDemoButton>
             </div>
             <p className="hero-note">A typical connection is live in 48 hours. The diagnostic fee is credited toward Invoz.</p>
           </div>
@@ -266,31 +265,14 @@ export default function LandingHome() {
         <section className="section diagnostic" id="diagnostic" aria-labelledby="diagnostic-title">
           <div className="container diagnostic-grid">
             <div>
-              <p className="section-label">Diagnostic</p>
-              <h2 id="diagnostic-title">Three days against a sample export.</h2>
+              <p className="section-label">Demo</p>
+              <h2 id="diagnostic-title">Book a demo.</h2>
               <p className="lede">
-                Send one billing file. The same pre-flight checks produce a two-page gap report:
-                serial shape, missing supply dates, TIN length, and VAT rounding. The fee is credited
-                in full toward implementation.
+                Tell us who you are and which ERPs you run. Anything else can go in other notes.
+                The request is saved and sent to the Invoz desk.
               </p>
-              <ul className="prepare">
-                <li>
-                  <Icon name="check" />
-                  <span>A finished invoice export, CSV or the file your ERP already writes.</span>
-                </li>
-                <li>
-                  <Icon name="check" />
-                  <span>Seller and buyer TINs, with invoice date and supply date in separate fields.</span>
-                </li>
-                <li>
-                  <Icon name="check" />
-                  <span>One credit note, if the desk issues them.</span>
-                </li>
-              </ul>
               <div className="diagnostic-actions">
-                <a className="btn btn-accent" href="mailto:?subject=Invoz%20diagnostic">
-                  Email a sample export
-                </a>
+                <BookDemoButton className="btn btn-accent">Book a demo</BookDemoButton>
                 <a className="btn btn-on-dark" href="/pricing">
                   Compare plans
                 </a>

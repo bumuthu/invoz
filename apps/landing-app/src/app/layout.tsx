@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import DemoProvider from "@/components/DemoProvider";
 import "./globals.css";
 
 const sans = Plus_Jakarta_Sans({
@@ -40,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a className="skip" href="#main">
           Skip to content
         </a>
-        {children}
+        <DemoProvider>{children}</DemoProvider>
       </body>
     </html>
   );

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import BookDemoButton from "@/components/BookDemoButton";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import Icon from "@/components/Icon";
@@ -86,9 +87,9 @@ export default function PricingPage() {
                       </li>
                     ))}
                   </ul>
-                  <a className={plan.featured ? "btn btn-accent" : "btn btn-secondary"} href="/#diagnostic">
+                  <BookDemoButton className={plan.featured ? "btn btn-accent" : "btn btn-secondary"}>
                     Book a demo
-                  </a>
+                  </BookDemoButton>
                 </article>
               ))}
             </div>
