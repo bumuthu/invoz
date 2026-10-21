@@ -148,10 +148,7 @@ export default function LandingHome() {
             <Bridge />
             <div className="hero-actions">
               <a className="btn btn-accent" href="#diagnostic">
-                Request a diagnostic
-              </a>
-              <a className="btn btn-secondary" href="/pricing">
-                See pricing
+                Book a demo
               </a>
             </div>
             <p className="hero-note">A typical connection is live in 48 hours. The diagnostic fee is credited toward Invoz.</p>

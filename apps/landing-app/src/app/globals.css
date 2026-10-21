@@ -2,7 +2,7 @@
   --color-primary: #2563eb;
   --color-on-primary: #ffffff;
   --color-accent: #ea580c;
-  --color-on-accent: #000000;
+  --color-on-accent: #ffffff;
   --color-background: #f8fafc;
   --color-foreground: #1e293b;
   --color-card: #ffffff;
@@ -138,11 +138,10 @@ svg {
   cursor: pointer;
 }
 
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  color: var(--color-primary);
-  flex: none;
+.brand-logo {
+  display: block;
+  height: 40px;
+  width: auto;
 }
 
 .nav-toggle {
@@ -207,6 +206,7 @@ svg {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-on-accent);
+  font-weight: 700;
 }
 
 .btn-accent:hover {

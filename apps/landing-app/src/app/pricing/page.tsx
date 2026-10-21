@@ -87,7 +87,7 @@ export default function PricingPage() {
                     ))}
                   </ul>
                   <a className={plan.featured ? "btn btn-accent" : "btn btn-secondary"} href="/#diagnostic">
-                    Request a diagnostic
+                    Book a demo
                   </a>
                 </article>
               ))}

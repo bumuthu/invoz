@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import BrandMark from "@/components/BrandMark";
 import Icon from "@/components/Icon";
+import Logo from "@/components/Logo";
 
 const links = [
   { href: "/#product", label: "Product" },
@@ -25,9 +25,8 @@ export default function Header() {
   return (
     <header className="site-header">
       <div className="container header-bar">
-        <a className="brand" href="/">
-          <BrandMark />
-          <span>Invoz</span>
+        <a className="brand" href="/" aria-label="Invoz">
+          <Logo />
         </a>
         <button
           type="button"
@@ -46,7 +45,7 @@ export default function Header() {
             </a>
           ))}
           <a className="btn btn-accent nav-cta" href="/#diagnostic" onClick={() => setOpen(false)}>
-            Request a diagnostic
+            Book a demo
           </a>
         </nav>
       </div>

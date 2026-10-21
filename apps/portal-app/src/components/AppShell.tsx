@@ -24,6 +24,7 @@ import Button from "@mui/material/Button";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Initials from "@/components/Initials";
+import Logo from "@/components/Logo";
 import { browserSupabase } from "@/lib/supabase-browser";
 import type { PortalData } from "@/lib/types";
 
@@ -61,17 +62,7 @@ function SidebarContent({
   return (
     <Stack sx={{ height: "100%" }}>
       <Box sx={{ px: 2.5, pt: 2.75, pb: 1.5 }}>
-        <Typography
-          sx={{
-            color: "primary.main",
-            fontWeight: 700,
-            fontSize: 22,
-            letterSpacing: "-0.05em",
-            lineHeight: 1,
-          }}
-        >
-          Invoz
-        </Typography>
+        <Logo height={32} />
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
           {organization.name}
         </Typography>
@@ -206,9 +197,9 @@ export default function AppShell({
           <IconButton edge="start" onClick={() => setOpen(true)} aria-label="Open navigation">
             <MenuIcon />
           </IconButton>
-          <Typography sx={{ ml: 1, fontWeight: 700, color: "primary.main", letterSpacing: "-0.04em" }}>
-            Invoz
-          </Typography>
+          <Box sx={{ ml: 1 }}>
+            <Logo height={28} />
+          </Box>
         </Toolbar>
       </AppBar>
       <Drawer

@@ -9,6 +9,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 import { browserSupabase } from "@/lib/supabase-browser";
 
 export default function LoginForm({ host, error }: { host: string; error?: string }) {
@@ -30,16 +31,7 @@ export default function LoginForm({ host, error }: { host: string; error?: strin
     >
       <Card sx={{ width: "100%", maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
-          <Typography
-            sx={{
-              color: "primary.main",
-              fontWeight: 700,
-              fontSize: 22,
-              letterSpacing: "-0.05em",
-            }}
-          >
-            Invoz
-          </Typography>
+          <Logo height={40} />
           <Typography variant="h4" component="h1" sx={{ mt: 4 }}>
             Sign in
           </Typography>

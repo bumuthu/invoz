@@ -1,13 +1,12 @@
-import BrandMark from "@/components/BrandMark";
+import Logo from "@/components/Logo";
 
 export default function Footer() {
   return (
     <footer className="site-footer">
       <div className="container footer-bar">
         <div>
-          <a className="brand footer-brand" href="https://invoz.lk">
-            <BrandMark />
-            <span>Invoz</span>
+          <a className="brand footer-brand" href="https://invoz.lk" aria-label="Invoz">
+            <Logo />
           </a>
           <p className="footer-copy">
             Invoz carries Sri Lankan VAT e-invoices into government RAMIS. RAMIS is the Inland Revenue
