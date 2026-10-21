@@ -70,7 +70,7 @@ function SidebarContent({
             lineHeight: 1,
           }}
         >
-          Portal
+          Invoz
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
           {organization.name}
@@ -207,7 +207,7 @@ export default function AppShell({
             <MenuIcon />
           </IconButton>
           <Typography sx={{ ml: 1, fontWeight: 700, color: "primary.main", letterSpacing: "-0.04em" }}>
-            Portal
+            Invoz
           </Typography>
         </Toolbar>
       </AppBar>

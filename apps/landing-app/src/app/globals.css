@@ -975,15 +975,20 @@ svg {
 }
 
 .footer-brand {
-  font-weight: 650;
-  letter-spacing: -0.03em;
+  font-size: 1.0625rem;
 }
 
 .footer-copy {
   max-width: 36rem;
-  margin-top: 0.4rem;
+  margin-top: 0.65rem;
   color: var(--color-muted-foreground);
   font-size: 0.875rem;
+}
+
+.footer-copy a {
+  color: var(--color-foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .footer-links {

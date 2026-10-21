@@ -1,12 +1,18 @@
+import BrandMark from "@/components/BrandMark";
+
 export default function Footer() {
   return (
     <footer className="site-footer">
       <div className="container footer-bar">
         <div>
-          <p className="footer-brand">RAMIS Middleware</p>
+          <a className="brand footer-brand" href="https://invoz.lk">
+            <BrandMark />
+            <span>Invoz</span>
+          </a>
           <p className="footer-copy">
-            Compliance middleware for Sri Lankan VAT invoices. RAMIS is the Inland Revenue
-            Department’s system. This product is an independent layer, and it is not an IRD service.
+            Invoz carries Sri Lankan VAT e-invoices into government RAMIS. RAMIS is the Inland Revenue
+            Department’s system. Invoz is an independent product at{" "}
+            <a href="https://invoz.lk">invoz.lk</a>, and it is not an IRD service.
           </p>
         </div>
         <nav className="footer-links" aria-label="Footer">

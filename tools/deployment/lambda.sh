@@ -78,7 +78,7 @@ aws iam put-role-policy \
   --policy-name "${FUNCTION_NAME}-pipeline" \
   --policy-document "file://$BUILD_DIR/permissions.json"
 
-echo "bundling @ramis/invoice-engine"
+echo "bundling @invoz/invoice-engine"
 (
   cd "$REPO_ROOT"
   npx esbuild packages/invoice-engine/src/index.ts \

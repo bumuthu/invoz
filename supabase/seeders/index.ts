@@ -3,7 +3,7 @@ import {
   tableColumns,
   type TableName,
   type Tables,
-} from "@ramis/common";
+} from "@invoz/common";
 import inbound from "./inbound.json";
 import outbound from "./outbound.json";
 import owner from "./owner.json";

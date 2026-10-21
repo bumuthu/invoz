@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import BrandMark from "@/components/BrandMark";
 import Icon from "@/components/Icon";
 
 const links = [
@@ -25,18 +26,8 @@ export default function Header() {
     <header className="site-header">
       <div className="container header-bar">
         <a className="brand" href="/">
-          <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="8" fill="currentColor" />
-            <path
-              d="M12 23V9h6.2a4.1 4.1 0 0 1 0 8.2H12M16.4 16.6 21.2 23"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <span>RAMIS Middleware</span>
+          <BrandMark />
+          <span>Invoz</span>
         </a>
         <button
           type="button"

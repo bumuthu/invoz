@@ -12,7 +12,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import { useState } from "react";
-import { portalRoleLabel, portalRoles, type PortalRole } from "@ramis/common";
+import { portalRoleLabel, portalRoles, type PortalRole } from "@invoz/common";
 import Initials from "@/components/Initials";
 import PageHeader from "@/components/PageHeader";
 import type { PortalUser } from "@/lib/types";

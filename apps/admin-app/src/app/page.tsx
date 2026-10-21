@@ -1,9 +1,9 @@
-import { portalRoleLabel, portalRoles } from "@ramis/common";
+import { portalRoleLabel, portalRoles } from "@invoz/common";
 
 export default function AdminHome() {
   return (
     <main>
-      <h1>Admin</h1>
+      <h1>Invoz Admin</h1>
       <p>Platform roles shared with the portal and the invoice workers.</p>
       <ul>
         {portalRoles.map((role) => (

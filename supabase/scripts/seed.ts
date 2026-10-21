@@ -6,7 +6,7 @@ import {
   portalRoles,
   tableColumns,
   type TableName,
-} from "@ramis/common";
+} from "@invoz/common";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { seeds, seedTables, type SeedDocument, type SeedRow } from "../seeders";

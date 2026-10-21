@@ -17,7 +17,7 @@ import {
   type OutboundAdjustmentRow,
   type OutboundInvoiceRow,
   type SerialCounterRow,
-} from "@ramis/common";
+} from "@invoz/common";
 import { supabase } from "@/lib/supabase";
 import { sessionSupabase } from "@/lib/session";
 import type { Invoice, InvoiceStatus, PortalData } from "@/lib/types";

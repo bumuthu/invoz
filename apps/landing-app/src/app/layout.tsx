@@ -9,10 +9,22 @@ const sans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "RAMIS Middleware",
+  metadataBase: new URL("https://invoz.lk"),
+  title: {
+    default: "Invoz",
+    template: "%s · Invoz",
+  },
   description:
-    "The product that carries e-invoices from SAP, IFS, Dynamics, Oracle, and Odoo into the government RAMIS e-invoice system.",
-  applicationName: "RAMIS Middleware",
+    "Invoz carries e-invoices from SAP, IFS, Dynamics, Oracle, and Odoo into the government RAMIS e-invoice system.",
+  applicationName: "Invoz",
+  openGraph: {
+    title: "Invoz",
+    description:
+      "Invoz carries e-invoices from SAP, IFS, Dynamics, Oracle, and Odoo into the government RAMIS e-invoice system.",
+    url: "https://invoz.lk",
+    siteName: "Invoz",
+    type: "website",
+  },
 };
 
 export const viewport: Viewport = {

@@ -4,7 +4,7 @@ import Header from "@/components/Header";
 import Icon from "@/components/Icon";
 
 export const metadata: Metadata = {
-  title: "Pricing · RAMIS Middleware",
+  title: "Pricing",
   description:
     "One subscription covers the organization. Plans are priced in rupees, from LKR 10,000 a month.",
 };

@@ -1,4 +1,4 @@
-import type { PortalRole } from "@ramis/common";
+import type { PortalRole } from "@invoz/common";
 
 export type InvoiceStatus = "Cleared" | "Rejected" | "Submitting" | "Skipped";
 

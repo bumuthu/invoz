@@ -2,13 +2,13 @@ While I cannot generate an automated file download link or file attachment direc
 
 1. Click the **Copy** button at the top or bottom of this message (or select all and copy).
 2. Open any text editor (such as Notepad, VS Code, TextEdit, or Obsidian).
-3. Paste the contents and save the file with the extension `.md` (for example, `RAMIS_Middleware_Blueprint.md`).
+3. Paste the contents and save the file with the extension `.md` (for example, `Invoz_Blueprint.md`).
 
 Here is the complete, clean Markdown document:
 
 ---
 
-# RAMIS E-Invoicing Middleware: Business Blueprint & Strategic Execution Plan
+# Invoz: Business Blueprint & Strategic Execution Plan
 
 ---
 
@@ -31,7 +31,7 @@ Connecting enterprise ERPs directly to RAMIS presents substantial operational an
 
 
 
-**The Solution:** A decoupled, serverless compliance middleware that acts as an intelligent pre-flight validation buffer, automated serial engine, asynchronous queue, and bidirectional reconciliation platform. By offering low-friction ingestion (SFTP/file-drop and REST webhooks), the platform enables enterprises running SAP, IFS, Microsoft Dynamics, Oracle, and Odoo to achieve compliance within 48 hours without rewriting core ERP software.
+**The Solution:** Invoz is a decoupled, serverless compliance product that acts as an intelligent pre-flight validation buffer, automated serial engine, asynchronous queue, and bidirectional reconciliation platform. By offering low-friction ingestion (SFTP/file-drop and REST webhooks), the platform enables enterprises running SAP, IFS, Microsoft Dynamics, Oracle, and Odoo to achieve compliance within 48 hours without rewriting core ERP software.
 
 ---
 
@@ -376,7 +376,7 @@ Local System Integrators (SIs) manage relationships with hundreds of mid-market 
 * **Rizing / attune:** SAP Gold Partner specializing in SAP Fashion and apparel supply chains (core of Phase 1).
 
 
-* **The Pitch to SIs:** *"We provide a certified, maintained RAMIS middleware engine. Your team delivers the billable ERP export mapping, pockets 50% to 70% of the initial setup fee, and earns a 20% to 25% recurring margin on the annual SaaS subscription for every client."*
+* **The Pitch to SIs:** *"We provide Invoz, a certified, maintained engine for the government RAMIS Web API. Your team delivers the billable ERP export mapping, pockets 50% to 70% of the initial setup fee, and earns a 20% to 25% recurring margin on the annual SaaS subscription for every client."*
 
 #### 2. Accounting BPOs & Tax Consultancies
 
@@ -395,14 +395,14 @@ Local System Integrators (SIs) manage relationships with hundreds of mid-market 
 * Access the Sri Lanka Export Development Board (EDB) online directory to identify large export manufacturers and IT heads.
 
 
-3. **The "RAMIS Readiness Diagnostic" Lead Magnet:**
+3. **The "Invoz Diagnostic" Lead Magnet:**
 * Avoid cold pitches offering "VAT consultation on commission," which face regulatory restrictions and CFO skepticism.
 
 
-* Instead, offer a 3-day **"RAMIS Readiness Diagnostic."** The client provides a sample billing export; your validation engine runs pre-flight checks and generates a 2-page gap report highlighting defective fields under Gazette 2481/22 (e.g., malformed serial numbers, missing supply dates, unrounded VAT math).
+* Instead, offer a 3-day **"Invoz diagnostic."** The client provides a sample billing export; your validation engine runs pre-flight checks and generates a 2-page gap report highlighting defective fields under Gazette 2481/22 (e.g., malformed serial numbers, missing supply dates, unrounded VAT math).
 
 
-* Convert the audit into a software sale: *"We will credit 100% of the diagnostic fee toward your middleware implementation."*
+* Convert the audit into a software sale: *"We will credit 100% of the diagnostic fee toward your Invoz implementation."*
 
 
 

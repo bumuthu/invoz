@@ -172,7 +172,7 @@ export default function Bridge() {
         </ul>
         <div className="hub">
           <p className="bridge-kicker">The product</p>
-          <p className="bridge-name">RAMIS Middleware</p>
+          <p className="bridge-name">Invoz</p>
         </div>
         <div className="dest">
           <p className="bridge-kicker">Government RAMIS</p>
@@ -190,7 +190,7 @@ export default function Bridge() {
         </div>
       </div>
       <figcaption className="bridge-caption">
-        <p>Each ERP sends its e-invoice into the product. From there it clears in government RAMIS.</p>
+        <p>Each ERP sends its e-invoice into Invoz. From there it clears in government RAMIS.</p>
         <button
           type="button"
           className="bridge-control"

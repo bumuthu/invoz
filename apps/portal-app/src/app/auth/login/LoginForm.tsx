@@ -38,7 +38,7 @@ export default function LoginForm({ host, error }: { host: string; error?: strin
               letterSpacing: "-0.05em",
             }}
           >
-            Portal
+            Invoz
           </Typography>
           <Typography variant="h4" component="h1" sx={{ mt: 4 }}>
             Sign in

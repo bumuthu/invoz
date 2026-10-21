@@ -1,5 +1,5 @@
 {
-  "name": "@ramis/supabase",
+  "name": "@invoz/supabase",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -7,7 +7,7 @@
     "seed": "node --env-file=.env --import tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@ramis/common": "*",
+    "@invoz/common": "*",
     "@supabase/supabase-js": "^2.81.1",
     "pg": "^8.16.3"
   },

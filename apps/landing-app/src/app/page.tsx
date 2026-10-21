@@ -142,7 +142,7 @@ export default function LandingHome() {
                 The <span>Bridge</span> From Your ERP To RAMIS.
               </h1>
               <p className="lede">
-                Each <span>e-invoice</span> moves from your ERP, through the product, into government RAMIS.
+                Each <span>e-invoice</span> moves from your ERP, through Invoz, into government RAMIS.
               </p>
             </div>
             <Bridge />
@@ -154,7 +154,7 @@ export default function LandingHome() {
                 See pricing
               </a>
             </div>
-            <p className="hero-note">A typical connection is live in 48 hours. The diagnostic fee is credited toward the product.</p>
+            <p className="hero-note">A typical connection is live in 48 hours. The diagnostic fee is credited toward Invoz.</p>
           </div>
         </section>
 
@@ -194,8 +194,8 @@ export default function LandingHome() {
               <p className="section-label">Clearance</p>
               <h2 id="flow-title">Four steps from post to acknowledgment.</h2>
               <p className="section-lead">
-                The billing system stays in place. The middleware numbers, checks, and submits, then
-                writes the result back for the ERP to read.
+                The billing system stays in place. Invoz numbers, checks, and submits, then writes
+                the result back for the ERP to read.
               </p>
             </header>
             <ol className="flow">
@@ -214,7 +214,7 @@ export default function LandingHome() {
           <div className="container">
             <header className="section-head">
               <p className="section-label">Product</p>
-              <h2 id="product-title">What the middleware holds.</h2>
+              <h2 id="product-title">What Invoz holds.</h2>
             </header>
             <div className="features">
               {features.map((feature) => (
@@ -291,7 +291,7 @@ export default function LandingHome() {
                 </li>
               </ul>
               <div className="diagnostic-actions">
-                <a className="btn btn-accent" href="mailto:?subject=RAMIS%20Readiness%20Diagnostic">
+                <a className="btn btn-accent" href="mailto:?subject=Invoz%20diagnostic">
                   Email a sample export
                 </a>
                 <a className="btn btn-on-dark" href="/pricing">

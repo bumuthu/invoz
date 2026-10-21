@@ -1,5 +1,5 @@
 {
-  "name": "@ramis/invoice-engine",
+  "name": "@invoz/invoice-engine",
   "version": "0.0.0",
   "private": true,
   "exports": {
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ramis/common": "*",
+    "@invoz/common": "*",
     "@supabase/supabase-js": "^2.81.1"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import { parseInvoiceJob, type LegalEntityRow } from "@ramis/common";
+import { parseInvoiceJob, type LegalEntityRow } from "@invoz/common";
 import type { SQSHandler } from "aws-lambda";
 import { createClient } from "@supabase/supabase-js";
 

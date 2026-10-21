@@ -8,8 +8,8 @@ const sans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Portal",
-  description: "RAMIS e-invoicing portal",
+  title: "Invoz",
+  description: "Invoz portal for e-invoices filed to government RAMIS.",
 };
 
 export default function RootLayout({

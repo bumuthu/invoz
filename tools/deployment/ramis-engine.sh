@@ -39,7 +39,7 @@ aws iam attach-role-policy \
   --role-name "$ENGINE_ROLE" \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-echo "bundling @ramis/engine"
+echo "bundling @invoz/engine"
 (
   cd "$REPO_ROOT"
   npx esbuild tools/ramis-engine/src/lambda.ts \

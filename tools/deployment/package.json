@@ -1,5 +1,5 @@
 {
-  "name": "@ramis/deployment",
+  "name": "@invoz/deployment",
   "private": true,
   "scripts": {
     "provision": "bash provision.sh",

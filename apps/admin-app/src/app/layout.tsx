@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Admin",
-  description: "RAMIS platform admin",
+  title: "Invoz Admin",
+  description: "Invoz platform admin",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

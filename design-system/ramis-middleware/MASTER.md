@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** RAMIS Middleware
+**Project:** Invoz
 **Generated:** 2026-10-20 00:33:01
 **Category:** SaaS (General)
 **Design Dials:** Variance 3/10 (Centered / Minimal) | Motion 4/10 (Standard) | Density 3/10 (Spacious)

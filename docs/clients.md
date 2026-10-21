@@ -90,5 +90,5 @@ The **Necessity Score** measures how urgently a company requires an external e-i
   > If your invoice does not carry the exact Gazette `YYMMM_QQQQ_XXXXX` sequence or fails pre-flight validation, your corporate buyers cannot match your bill on RAMIS Schedule 02 and will delay your payment to protect their 18% VAT credit.
 3. **The "Zero IT Overhead" hook**
   Reassure the Financial Controller immediately:
-  > We know you don't have an internal software engineering team. You do not need one. Your existing ERP simply drops a standard CSV or file into a secure folder, and our middleware handles the rest within 48 hours.
+  > We know you don't have an internal software engineering team. You do not need one. Your existing ERP simply drops a standard CSV or file into a secure folder, and Invoz handles the rest within 48 hours.
 

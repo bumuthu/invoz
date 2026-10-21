@@ -17,7 +17,7 @@ flowchart LR
   s3[S3]
   events[EventBridge]
   fifo[SQS FIFO]
-  lambda["Lambda<br/>@ramis/invoice-engine"]
+  lambda["Lambda<br/>@invoz/invoice-engine"]
   apigw[API Gateway]
   engine["Lambda<br/>ramis-engine"]
   secrets[Secrets Manager]
@@ -47,7 +47,7 @@ flowchart LR
 | Storage | Amazon S3 | Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
 | Routing | Amazon EventBridge | Forwards a created-object event into the FIFO queue. |
 | Sequencing | Amazon SQS FIFO `invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
-| Worker | AWS Lambda `invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@ramis/invoice-engine`. Parses the file with that legal entity's field mapping, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
+| Worker | AWS Lambda `invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@invoz/invoice-engine`. Parses the file with that legal entity's field mapping, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
 | RAMIS stand-in | AWS Lambda `ramis-engine` | One function behind an HTTP API. Every route is handled by `handler` in `tools/ramis-engine/src/lambda.ts`. |
 | Certificates | AWS Secrets Manager | RAMIS client certificate and private key, encrypted with KMS. `ramis_credentials.certificate_secret_arn` stores the ARN. |
 | Failures | Amazon SQS FIFO `invoicing-pipeline-dlq.fifo` | Messages that still fail after 3 receives. Unparseable files and permanent 4xx outcomes are recorded as rejected before that. |
@@ -63,7 +63,7 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 2. Transfer Family writes `s3://…/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
 3. S3 emits an object-created event to EventBridge.
 4. EventBridge sends a message to `invoicing-pipeline.fifo` with `MessageGroupId = {legalEntityId}:{branchCode}`.
-5. Lambda reads the message and runs `handler` from `@ramis/invoice-engine`:
+5. Lambda reads the message and runs `handler` from `@invoz/invoice-engine`:
    * download and parse the file with the legal entity field mapping
    * check 9-digit TINs, separate invoice and supply dates, and VAT math
    * allocate `YYMMM_QQQQ_XXXXX` in Supabase
@@ -131,10 +131,10 @@ Supabase holds operational state and serves the apps. It does not receive ERP fi
 | `migrations/0001_initial.sql` | Organizations, legal entities, branches, memberships, invoices, adjustments, serials, credentials, usage, audit log, and Row-Level Security. |
 | `seeders/` | JSON seed objects exported from `seeders/index.ts`. |
 | `scripts/migrate.ts` | Applies `migrations` and records each file in `schema_migrations`. |
-| `scripts/seed.ts` | Inserts every seed object using `tableColumns` from `@ramis/common`. |
+| `scripts/seed.ts` | Inserts every seed object using `tableColumns` from `@invoz/common`. |
 | `er-diagram.md` | Entity diagram for the migration. |
 
-The Lambda handler is `handler` in `@ramis/invoice-engine`. There is no Supabase Edge Function and no database queue.
+The Lambda handler is `handler` in `@invoz/invoice-engine`. There is no Supabase Edge Function and no database queue.
 
 Row-Level Security is enabled on every table, and `anon` and `authenticated` have no grants. The service role bypasses that. The portal publishable key can sign a user in and cannot read tables.
 
@@ -174,13 +174,13 @@ The browser key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, or `NEXT_PUBLIC_SUPAB
 ## Workspace
 
 ```text
-ramis-middleware
+invoz
 ├── apps
 │   ├── landing-app          public site, port 3002
 │   ├── portal-app           organization portal, port 3000
 │   └── admin-app            platform admin, port 3001
 ├── packages
-│   ├── common               @ramis/common
+│   ├── common               @invoz/common
 │   └── invoice-engine       Lambda worker
 ├── tools
 │   ├── ramis-engine         RAMIS stand-in, one Lambda
@@ -191,10 +191,10 @@ ramis-middleware
 | App | Port | Role |
 | --- | --- | --- |
 | `landing-app` | 3002 | Public site. |
-| `portal-app` | 3000 | One organization, chosen from the signed-in user's membership. Overview, invoices, Schedule 02, field mapping, branches, users, subscription. Roles come from `@ramis/common`. |
+| `portal-app` | 3000 | One organization, chosen from the signed-in user's membership. Overview, invoices, Schedule 02, field mapping, branches, users, subscription. Roles come from `@invoz/common`. |
 | `admin-app` | 3001 | Platform admin. |
 
-`@ramis/common` is shared by the apps, the Lambda, and the seeder.
+`@invoz/common` is shared by the apps, the Lambda, and the seeder.
 
 | Export | Contents |
 | --- | --- |

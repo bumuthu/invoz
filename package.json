@@ -1,5 +1,5 @@
 {
-  "name": "ramis-middleware",
+  "name": "invoz",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -11,13 +11,13 @@
     "dev:portal": "npm run dev -w portal-app",
     "dev:admin": "npm run dev -w admin-app",
     "dev:landing": "npm run dev -w landing-app",
-    "dev:ramis": "npm run dev -w @ramis/engine",
-    "test:ramis": "npm run test -w @ramis/engine",
+    "dev:ramis": "npm run dev -w @invoz/engine",
+    "test:ramis": "npm run test -w @invoz/engine",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "migrate": "npm run migrate -w @ramis/supabase",
-    "migrate:ramis": "npm run migrate -w @ramis/engine",
-    "seed": "npm run seed -w @ramis/supabase",
-    "provision": "npm run provision -w @ramis/deployment",
-    "provision:ramis": "npm run provision:ramis -w @ramis/deployment"
+    "migrate": "npm run migrate -w @invoz/supabase",
+    "migrate:ramis": "npm run migrate -w @invoz/engine",
+    "seed": "npm run seed -w @invoz/supabase",
+    "provision": "npm run provision -w @invoz/deployment",
+    "provision:ramis": "npm run provision:ramis -w @invoz/deployment"
   }
 }
