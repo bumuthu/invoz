@@ -1,4 +1,5 @@
 import Bridge from "@/components/Bridge";
+import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import Icon from "@/components/Icon";
 
@@ -128,50 +129,6 @@ const mandates = [
   },
 ];
 
-const plans = [
-  {
-    name: "Standard",
-    price: "10,000",
-    billing: "LKR 120,000 billed annually",
-    featured: false,
-    points: [
-      "Up to 500 invoices a month",
-      "LKR 10 overage per invoice",
-      "Setup LKR 50,000–75,000",
-      "Schedule 01 and the serial engine",
-      "Email support",
-    ],
-  },
-  {
-    name: "Professional",
-    price: "75,000",
-    billing: "LKR 900,000 a year, or semi-annual",
-    featured: true,
-    points: [
-      "Up to 5,000 invoices a month",
-      "LKR 8 overage per invoice",
-      "Setup LKR 250,000",
-      "Schedule 01, 04, and 02 matching",
-      "Multi-branch serial lanes",
-      "Business-hours support",
-    ],
-  },
-  {
-    name: "Enterprise",
-    price: "175,000",
-    billing: "LKR 2,100,000 billed annually",
-    featured: false,
-    points: [
-      "Up to 25,000 invoices a month",
-      "LKR 5 overage per invoice",
-      "Setup LKR 450,000",
-      "Queued processing and an SLA",
-      "Dedicated exception desk",
-      "Priority support",
-    ],
-  },
-];
-
 export default function LandingHome() {
   return (
     <>
@@ -193,7 +150,7 @@ export default function LandingHome() {
               <a className="btn btn-accent" href="#diagnostic">
                 Request a diagnostic
               </a>
-              <a className="btn btn-secondary" href="#pricing">
+              <a className="btn btn-secondary" href="/pricing">
                 See pricing
               </a>
             </div>
@@ -291,48 +248,7 @@ export default function LandingHome() {
           </div>
         </section>
 
-        <section className="section" id="pricing" aria-labelledby="pricing-title">
-          <div className="container">
-            <header className="section-head">
-              <p className="section-label">Pricing</p>
-              <h2 id="pricing-title">Priced in rupees, for the whole group.</h2>
-              <p className="section-lead">
-                One subscription covers the organization. Invoices cleared by every legal entity count
-                toward the same monthly allowance.
-              </p>
-            </header>
-            <div className="plans">
-              {plans.map((plan) => (
-                <article className={plan.featured ? "plan plan-featured" : "plan"} key={plan.name}>
-                  {plan.featured ? <p className="plan-flag">Most teams</p> : null}
-                  <h3>{plan.name}</h3>
-                  <p className="plan-price">
-                    LKR {plan.price}
-                    <span>per month</span>
-                  </p>
-                  <p className="plan-billing">{plan.billing}</p>
-                  <ul>
-                    {plan.points.map((point) => (
-                      <li key={point}>
-                        <Icon name="check" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <a className={plan.featured ? "btn btn-accent" : "btn btn-secondary"} href="#diagnostic">
-                    Request a diagnostic
-                  </a>
-                </article>
-              ))}
-            </div>
-            <p className="plan-footnote">
-              Banks, leasing firms, and supermarket groups are quoted. Volumes above 50,000 invoices a
-              month are contracted separately, from LKR 3.5 million a year.
-            </p>
-          </div>
-        </section>
-
-        <section className="section section-alt" id="mandate" aria-labelledby="mandate-title">
+        <section className="section" id="mandate" aria-labelledby="mandate-title">
           <div className="container">
             <header className="section-head">
               <p className="section-label">Mandate</p>
@@ -378,7 +294,7 @@ export default function LandingHome() {
                 <a className="btn btn-accent" href="mailto:?subject=RAMIS%20Readiness%20Diagnostic">
                   Email a sample export
                 </a>
-                <a className="btn btn-on-dark" href="#pricing">
+                <a className="btn btn-on-dark" href="/pricing">
                   Compare plans
                 </a>
               </div>
@@ -394,24 +310,7 @@ export default function LandingHome() {
           </div>
         </section>
       </main>
-      <footer className="site-footer">
-        <div className="container footer-bar">
-          <div>
-            <p className="footer-brand">RAMIS Middleware</p>
-            <p className="footer-copy">
-              Compliance middleware for Sri Lankan VAT invoices. RAMIS is the Inland Revenue
-              Department’s system. This product is an independent layer, and it is not an IRD service.
-            </p>
-          </div>
-          <nav className="footer-links" aria-label="Footer">
-            <a href="#product">Product</a>
-            <a href="#flow">Clearance</a>
-            <a href="#pricing">Pricing</a>
-            <a href="#mandate">Mandate</a>
-            <a href="#diagnostic">Diagnostic</a>
-          </nav>
-        </div>
-      </footer>
+      <Footer />
     </>
   );
 }

@@ -4,10 +4,9 @@ import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 
 const links = [
-  { href: "#product", label: "Product" },
-  { href: "#flow", label: "Clearance" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#mandate", label: "Mandate" },
+  { href: "/#product", label: "Product" },
+  { href: "/#flow", label: "Clearance" },
+  { href: "/#mandate", label: "Mandate" },
 ];
 
 export default function Header() {
@@ -55,7 +54,7 @@ export default function Header() {
               {link.label}
             </a>
           ))}
-          <a className="btn btn-accent nav-cta" href="#diagnostic" onClick={() => setOpen(false)}>
+          <a className="btn btn-accent nav-cta" href="/#diagnostic" onClick={() => setOpen(false)}>
             Request a diagnostic
           </a>
         </nav>
