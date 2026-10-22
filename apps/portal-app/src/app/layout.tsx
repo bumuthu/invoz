@@ -19,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={sans.variable}>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeRegistry>{children}</ThemeRegistry>
       </body>
     </html>
