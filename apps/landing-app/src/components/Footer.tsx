@@ -1,3 +1,4 @@
+import ContactDetails from "@/components/ContactDetails";
 import Logo from "@/components/Logo";
 
 export default function Footer() {
@@ -5,7 +6,7 @@ export default function Footer() {
     <footer className="site-footer">
       <div className="container footer-bar">
         <div>
-          <a className="brand footer-brand" href="https://invoz.lk" aria-label="Invoz">
+          <a className="brand footer-brand" href="/" aria-label="Invoz">
             <Logo />
           </a>
           <p className="footer-copy">
@@ -14,13 +15,7 @@ export default function Footer() {
             <a href="https://invoz.lk">invoz.lk</a>, and it is not an IRD service.
           </p>
         </div>
-        <nav className="footer-links" aria-label="Footer">
-          <a href="/#product">Product</a>
-          <a href="/#flow">Clearance</a>
-          <a href="/pricing">Pricing</a>
-          <a href="/#mandate">Mandate</a>
-          <a href="/#diagnostic">Diagnostic</a>
-        </nav>
+        <ContactDetails className="footer-contact" />
       </div>
     </footer>
   );

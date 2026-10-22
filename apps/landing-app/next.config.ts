@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@invoz/common"],
+  async redirects() {
+    return [{ source: "/pricing", destination: "/", permanent: false }];
+  },
   async headers() {
     return [
       {

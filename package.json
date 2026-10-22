@@ -18,6 +18,7 @@
     "migrate:ramis": "npm run migrate -w @invoz/engine",
     "seed": "npm run seed -w @invoz/supabase",
     "provision": "npm run provision -w @invoz/deployment",
-    "provision:ramis": "npm run provision:ramis -w @invoz/deployment"
+    "provision:ramis": "npm run provision:ramis -w @invoz/deployment",
+    "provision:landing": "npm run provision:landing -w @invoz/deployment"
   }
 }

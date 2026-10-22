@@ -273,9 +273,6 @@ export default function LandingHome() {
               </p>
               <div className="diagnostic-actions">
                 <BookDemoButton className="btn btn-accent">Book a demo</BookDemoButton>
-                <a className="btn btn-on-dark" href="/pricing">
-                  Compare plans
-                </a>
               </div>
             </div>
             <aside className="receive" aria-label="What the report covers">

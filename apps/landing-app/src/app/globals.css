@@ -992,25 +992,81 @@ svg {
   text-underline-offset: 0.15em;
 }
 
-.footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+.footer-contact,
+.demo-contact {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  margin: 0;
+  font-style: normal;
 }
 
-.footer-links a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
+.contact-title {
+  margin: 0 0 0.35rem;
+  color: var(--color-muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.footer-contact a,
+.demo-contact a,
+.footer-contact .contact-address,
+.demo-contact .contact-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.footer-contact a,
+.demo-contact a {
+  color: var(--color-foreground);
+  font-size: 1rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.footer-contact a span,
+.demo-contact a span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.footer-contact a:hover,
+.demo-contact a:hover {
+  color: var(--color-primary);
+}
+
+.footer-contact .contact-address,
+.demo-contact .contact-address {
   color: var(--color-muted-foreground);
   font-size: 0.9375rem;
-  text-decoration: none;
-  cursor: pointer;
-  transition: color 200ms ease;
 }
 
-.footer-links a:hover {
-  color: var(--color-foreground);
+.footer-contact svg,
+.demo-contact svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 0.12rem;
+  color: var(--color-primary);
+}
+
+.demo-body {
+  flex: 1 0 auto;
+  padding: 0 1.25rem;
+}
+
+.demo-contact {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  margin-top: 1.25rem;
+  padding: 1.25rem 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-border);
+  background: var(--color-card);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1264,19 +1320,29 @@ svg {
   right: 0;
   display: flex;
   flex-direction: column;
-  width: min(26rem, 100%);
+  width: min(40rem, 100%);
   height: 100%;
-  padding: 1.5rem;
+  max-height: 100dvh;
   overflow: auto;
+  scrollbar-width: none;
   background: var(--color-card);
   box-shadow: var(--shadow-md);
 }
 
+.demo-panel::-webkit-scrollbar {
+  display: none;
+}
+
 .demo-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  padding: 1.25rem 1.25rem 0;
+  background: var(--color-card);
 }
 
 .demo-head h2 {
@@ -1299,8 +1365,17 @@ svg {
 
 .demo-form {
   display: grid;
-  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.9rem 1rem;
+  width: 100%;
   margin-top: 1.5rem;
+}
+
+.demo-wide,
+.demo-error,
+.demo-form .btn {
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .demo-form label {
@@ -1313,6 +1388,8 @@ svg {
 .demo-form input,
 .demo-form textarea {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--color-border);
@@ -1354,5 +1431,40 @@ svg {
 
   to {
     transform: translateX(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .demo-panel {
+    width: 100%;
+  }
+
+  .demo-head {
+    padding-top: max(1.25rem, env(safe-area-inset-top));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+  }
+
+  .demo-head h2 {
+    font-size: 1.5rem;
+  }
+
+  .demo-body,
+  .demo-contact {
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+  }
+
+  .demo-form {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 1.25rem;
+  }
+
+  .demo-form textarea {
+    min-height: 5.5rem;
+  }
+
+  .demo-form .btn {
+    width: 100%;
   }
 }

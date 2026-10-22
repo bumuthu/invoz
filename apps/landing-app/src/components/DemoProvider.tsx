@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import ContactDetails from "@/components/ContactDetails";
 
 type DemoContextValue = {
   openDemo: () => void;
@@ -84,6 +85,7 @@ function DemoDrawer({ onClose }: { onClose: () => void }) {
             ×
           </button>
         </div>
+        <div className="demo-body">
         {done ? (
           <p className="demo-success">Request received. The Invoz desk has it and will reply by email.</p>
         ) : (
@@ -93,13 +95,26 @@ function DemoDrawer({ onClose }: { onClose: () => void }) {
               event.preventDefault();
               const form = event.currentTarget;
               const data = Object.fromEntries(new FormData(form));
+              const endpoint = process.env.NEXT_PUBLIC_LANDING_API_URL?.replace(/\/$/, "");
               setPending(true);
               setError("");
-              const response = await fetch("/api/demo", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-              });
+              if (!endpoint) {
+                setPending(false);
+                setError("The demo service is not configured.");
+                return;
+              }
+              let response: Response;
+              try {
+                response = await fetch(`${endpoint}/demo`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(data),
+                });
+              } catch {
+                setPending(false);
+                setError("The request could not be sent.");
+                return;
+              }
               setPending(false);
               if (!response.ok) {
                 const payload = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -130,20 +145,22 @@ function DemoDrawer({ onClose }: { onClose: () => void }) {
               Company
               <input name="company" autoComplete="organization" required maxLength={160} />
             </label>
-            <label>
+            <label className="demo-wide">
               ERPs
               <input name="erp" required maxLength={160} placeholder="SAP, Odoo, IFS" />
             </label>
-            <label>
+            <label className="demo-wide">
               Other notes
               <textarea name="note" rows={4} maxLength={2000} placeholder="Any other details." />
             </label>
             {error ? <p className="demo-error">{error}</p> : null}
             <button className="btn btn-accent" type="submit" disabled={pending}>
-              {pending ? "Sending…" : "Book a demo"}
+              {pending ? "Sending…" : "Send"}
             </button>
           </form>
         )}
+        </div>
+        <ContactDetails className="demo-contact" />
       </section>
     </div>
   );
