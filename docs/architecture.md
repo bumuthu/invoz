@@ -43,8 +43,8 @@ flowchart LR
 
 | Tier | Service | Role |
 | --- | --- | --- |
-| SFTP ingestion | AWS Transfer Family | Managed SFTP. ERP SSH keys land in `/uploads/{organization_id}/{legal_entity_id}/inbound/`. |
-| Storage | Amazon S3 | Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
+| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user is rooted in that organization's bucket. ERP SSH keys land in `/uploads/{organization_id}/{legal_entity_id}/inbound/`. |
+| Storage | Amazon S3 | One bucket per organization, named `{organization_id}-invoice-bucket`. Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
 | Routing | Amazon EventBridge | Forwards a created-object event into the FIFO queue. |
 | Sequencing | Amazon SQS FIFO `invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
 | Worker | AWS Lambda `invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@invoz/invoice-engine`. Parses the file with that legal entity's field mapping, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
@@ -60,7 +60,7 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 ## Processing flow
 
 1. The ERP uploads `invoice_001.csv` through Transfer Family.
-2. Transfer Family writes `s3://…/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
+2. Transfer Family writes `s3://{organization_id}-invoice-bucket/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
 3. S3 emits an object-created event to EventBridge.
 4. EventBridge sends a message to `invoicing-pipeline.fifo` with `MessageGroupId = {legalEntityId}:{branchCode}`.
 5. Lambda reads the message and runs `handler` from `@invoz/invoice-engine`:

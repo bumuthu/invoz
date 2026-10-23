@@ -3,6 +3,12 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require_aws
 
+if [[ -z "${ORGANIZATION_ID:-}" ]]; then
+  echo "ORGANIZATION_ID is required. The bucket name is {organization uuid}${BUCKET_SUFFIX}." >&2
+  exit 1
+fi
+
+BUCKET=$(org_bucket "$ORGANIZATION_ID") || exit 1
 mkdir -p "$BUILD_DIR"
 
 if aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then

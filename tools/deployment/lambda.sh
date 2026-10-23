@@ -57,12 +57,12 @@ cat >"$BUILD_DIR/permissions.json" <<EOF
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::$BUCKET/*"
+      "Resource": "arn:aws:s3:::*${BUCKET_SUFFIX}/*"
     },
     {
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::$BUCKET"
+      "Resource": "arn:aws:s3:::*${BUCKET_SUFFIX}"
     },
     {
       "Effect": "Allow",

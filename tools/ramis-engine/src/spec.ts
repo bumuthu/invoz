@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const docsHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -22,11 +21,19 @@ const docsHtml = `<!DOCTYPE html>
 </html>
 `;
 
+function openApiPath(): string | undefined {
+  const entry = process.argv[1] ? path.dirname(process.argv[1]) : "";
+  const candidates = [
+    entry && path.join(entry, "openapi.yaml"),
+    entry && path.join(entry, "../openapi.yaml"),
+    path.join(process.cwd(), "openapi.yaml"),
+    path.join(process.cwd(), "tools/ramis-engine/openapi.yaml"),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
 export function openApiDocument(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const file = [path.join(here, "../openapi.yaml"), path.join(here, "openapi.yaml")].find((candidate) =>
-    existsSync(candidate),
-  );
+  const file = openApiPath();
   if (!file) throw new Error("openapi.yaml was not found beside the engine");
   return readFileSync(file, "utf8");
 }
