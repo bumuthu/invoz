@@ -1,5 +1,5 @@
 import { supabase } from "./db";
-import { mailConfigured, sendDemoMail } from "./mail";
+import { emailEnabled, mailConfigured, sendDemoMail } from "./mail";
 import type { LandingRequest, LandingResponse } from "./types";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -42,6 +42,10 @@ export async function bookDemo(request: LandingRequest): Promise<LandingResponse
   if (error) {
     console.error(error);
     return { status: 500, body: { error: "The request could not be saved." } };
+  }
+
+  if (!emailEnabled()) {
+    return { status: 200, body: { ok: true, emailed: false } };
   }
 
   if (!mailConfigured()) {

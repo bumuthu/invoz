@@ -1055,18 +1055,39 @@ svg {
 }
 
 .demo-body {
-  flex: 1 0 auto;
-  padding: 0 1.25rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 1.25rem 1.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .demo-contact {
-  position: sticky;
-  bottom: 0;
   flex-shrink: 0;
-  margin-top: 1.25rem;
-  padding: 1.25rem 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 1.25rem;
+  row-gap: 0.35rem;
+  align-items: start;
+  margin-top: 0;
+  padding: 1rem 1.25rem max(1rem, env(safe-area-inset-bottom));
   border-top: 1px solid var(--color-border);
   background: var(--color-card);
+}
+
+.demo-contact .contact-title {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.demo-contact .contact-address {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.demo-contact .contact-address span {
+  min-width: 0;
+  text-align: right;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1323,20 +1344,13 @@ svg {
   width: min(40rem, 100%);
   height: 100%;
   max-height: 100dvh;
-  overflow: auto;
-  scrollbar-width: none;
+  overflow: hidden;
   background: var(--color-card);
   box-shadow: var(--shadow-md);
 }
 
-.demo-panel::-webkit-scrollbar {
-  display: none;
-}
-
 .demo-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1413,9 +1427,28 @@ svg {
   font-size: 0.9375rem;
 }
 
+.demo-body-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .demo-success {
-  margin-top: 1.5rem;
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+  max-width: 22rem;
+  margin: 0;
+  text-align: center;
   color: var(--color-foreground);
+}
+
+.demo-success p {
+  margin: 0;
+}
+
+.demo-success .btn {
+  min-width: 8rem;
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -84,7 +84,7 @@ echo "bundling @invoz/invoice-engine"
   npx esbuild packages/invoice-engine/src/index.ts \
     --bundle \
     --platform=node \
-    --target=node20 \
+    --target=node22 \
     --format=cjs \
     --outfile="$BUILD_DIR/index.js"
 )
@@ -118,6 +118,7 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >
   aws lambda update-function-configuration \
     --function-name "$FUNCTION_NAME" \
     --region "$REGION" \
+    --runtime nodejs22.x \
     --timeout 60 \
     --memory-size 512 \
     --environment "file://$ENV_FILE" \
@@ -129,7 +130,7 @@ else
     if aws lambda create-function \
       --function-name "$FUNCTION_NAME" \
       --region "$REGION" \
-      --runtime nodejs20.x \
+      --runtime nodejs22.x \
       --handler index.handler \
       --role "$ROLE_ARN" \
       --timeout 60 \

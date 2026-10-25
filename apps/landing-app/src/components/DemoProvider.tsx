@@ -85,9 +85,14 @@ function DemoDrawer({ onClose }: { onClose: () => void }) {
             ×
           </button>
         </div>
-        <div className="demo-body">
+        <div className={done ? "demo-body demo-body-done" : "demo-body"}>
         {done ? (
-          <p className="demo-success">Request received. The Invoz desk has it and will reply by email.</p>
+          <div className="demo-success">
+            <p>Request received. The Invoz team will contact you soon.</p>
+            <button type="button" className="btn btn-accent" onClick={onClose}>
+              Back to the site
+            </button>
+          </div>
         ) : (
           <form
             className="demo-form"

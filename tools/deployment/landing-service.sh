@@ -45,7 +45,7 @@ echo "bundling @invoz/landing-service"
   npx esbuild packages/landing-service/src/lambda.ts \
     --bundle \
     --platform=node \
-    --target=node20 \
+    --target=node22 \
     --format=cjs \
     --outfile="$BUILD_DIR/landing-service.js"
 )
@@ -62,7 +62,7 @@ variables = {
     "SUPABASE_URL": os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", ""),
     "SUPABASE_SERVICE_ROLE_KEY": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
 }
-for name in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "DEMO_FROM_EMAIL", "LANDING_ALLOWED_ORIGINS"):
+for name in ("LANDING_EMAIL_ENABLED", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "DEMO_FROM_EMAIL", "LANDING_ALLOWED_ORIGINS"):
     value = os.environ.get(name, "").strip()
     if value:
         variables[name] = value
@@ -80,6 +80,7 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >
   aws lambda update-function-configuration \
     --function-name "$FUNCTION_NAME" \
     --region "$REGION" \
+    --runtime nodejs22.x \
     --handler landing-service.handler \
     --timeout 20 \
     --memory-size 256 \
@@ -92,7 +93,7 @@ else
     if aws lambda create-function \
       --function-name "$FUNCTION_NAME" \
       --region "$REGION" \
-      --runtime nodejs20.x \
+      --runtime nodejs22.x \
       --handler landing-service.handler \
       --role "$ROLE_ARN" \
       --timeout 20 \

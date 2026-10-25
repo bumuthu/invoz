@@ -11,6 +11,11 @@ export type DemoMail = {
   note: string;
 };
 
+export function emailEnabled() {
+  const value = (process.env.LANDING_EMAIL_ENABLED || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 export function mailConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD);
 }

@@ -301,7 +301,7 @@ Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with pa
 | `ramis-engine` | `ramis-engine` | 30 s | 512 MB | `invoice-engine`, through `RAMIS_API_URL` |
 | `landing-service` | `landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
 
-`RAMIS_DATABASE_URL` must be exported before the RAMIS API. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be exported before the landing API. Optional SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `DEMO_FROM_EMAIL`) are copied onto `landing-service` when they are set. See `packages/landing-service/.env.example`.
+`RAMIS_DATABASE_URL` must be exported before the RAMIS API. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be exported before the landing API. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`. SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `DEMO_FROM_EMAIL`) are copied when set and used only while that flag is on. See `packages/landing-service/.env.example`.
 
 ```bash
 npm run provision:ramis
