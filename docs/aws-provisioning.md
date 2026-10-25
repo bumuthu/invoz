@@ -2,17 +2,20 @@
 
 Run these from the repo root, in order. The default region is `ap-south-1`.
 
-S3, SQS, the `invoice-engine` Lambda, EventBridge, and the two HTTP APIs come from `tools/deployment`. SFTP does not. Transfer Family is created with the AWS CLI after the bucket exists. `invoice-engine` has no API Gateway. SQS invokes it. API Gateway sits in front of `ramis-engine` and `landing-service` only.
+S3, SQS, the invoice-engine Lambda, EventBridge, and the two HTTP APIs come from `tools/deployment`. SFTP does not. Transfer Family is created with the AWS CLI after the bucket exists. The invoice-engine Lambda has no API Gateway. SQS invokes it. API Gateway sits in front of the RAMIS and landing Lambdas only.
 
-Function names are not in `.env`. Each script uses its own default when the override variable is unset:
+`APP_ENV` is `stag` or `prod`. Every AWS name is `invoz-{APP_ENV}-{resource}`:
 
-| Command | Default function | Override variable |
-| --- | --- | --- |
-| `npm run provision` and `npm run provision:lambda` | `invoice-engine` | `INVOICE_FUNCTION_NAME` |
-| `npm run provision:ramis` | `ramis-engine` | `RAMIS_ENGINE_FUNCTION_NAME` |
-| `npm run provision:landing` | `landing-service` | `LANDING_FUNCTION_NAME` |
-
-The HTTP API names match those function names (`RAMIS_ENGINE_API_NAME`, `LANDING_API_NAME`).
+| Resource | Name |
+| --- | --- |
+| S3 bucket | `invoz-{env}-invoices` |
+| SQS work queue | `invoz-{env}-invoicing-pipeline.fifo` |
+| SQS dead-letter queue | `invoz-{env}-invoicing-pipeline-dlq.fifo` |
+| EventBridge rule | `invoz-{env}-s3-csv-created` |
+| Invoice Lambda and its role | `invoz-{env}-invoice-engine`, `invoz-{env}-invoice-engine-role` |
+| RAMIS Lambda, role, and HTTP API | `invoz-{env}-ramis-engine`, `invoz-{env}-ramis-engine-role` |
+| Landing Lambda, role, and HTTP API | `invoz-{env}-landing-service`, `invoz-{env}-landing-service-role` |
+| Transfer Family role | `invoz-{env}-transfer` |
 
 `npm run provision` runs S3, SQS, Lambda, and EventBridge in one shot. Use the steps below when you want to create one resource at a time. EventBridge has no script of its own. The full `npm run provision` command is what attaches it, and that command is safe to repeat.
 
@@ -34,7 +37,8 @@ cp tools/deployment/env.example tools/deployment/.env
 | Variable | Required for | Purpose |
 | --- | --- | --- |
 | `AWS_REGION` | Every step | Defaults to `ap-south-1` when unset. |
-| `ORGANIZATION_ID` | S3, per organization | Organization uuid. Not stored in `.env`. The bucket name is `{organization id}-invoice-bucket`. |
+| `APP_ENV` | Every step | `stag` or `prod`. Prefixes every AWS name. |
+| `ORGANIZATION_ID` | SFTP, per organization | Organization uuid from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
 | `SUPABASE_URL` | `invoice-engine`, landing API | Portal database API URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | `invoice-engine`, landing API | Service role key for that project. |
 | `RAMIS_DATABASE_URL` | RAMIS API | Engine database URL. Separate from the portal database. |
@@ -55,20 +59,18 @@ Keep that shell open for the steps below.
 
 ## 1. S3
 
-Create one bucket per organization. The name is `{organization uuid}-invoice-bucket`. Repeat this command for each organization. The bucket blocks public access, encrypts objects with SSE-S3, turns on versioning, and allows S3 to send object-created events to EventBridge.
+Create one bucket named `invoz-{env}-invoices`. Each organization is the prefix `uploads/{organization uuid}/`. The bucket blocks public access, encrypts objects with SSE-S3, turns on versioning, and allows S3 to send object-created events to EventBridge.
 
-This command does not create the EventBridge rule. `aws events describe-rule --name ramis-s3-csv-created` fails with `ResourceNotFoundException` until step 5.
-
-`ORGANIZATION_ID` must be the uuid from `organizations.id`.
+This command does not create the EventBridge rule. `aws events describe-rule --name invoz-${APP_ENV}-s3-csv-created` fails with `ResourceNotFoundException` until step 5. A new organization does not need a new bucket or a new rule.
 
 ```bash
-ORGANIZATION_ID="<organization-uuid>" npm run provision:s3 -w @invoz/deployment
+npm run provision:s3 -w @invoz/deployment
 ```
 
 Check:
 
 ```bash
-BUCKET="${ORGANIZATION_ID}-invoice-bucket"
+BUCKET="invoz-${APP_ENV}-invoices"
 aws s3api head-bucket --bucket "$BUCKET" --region "$AWS_REGION"
 aws s3api get-bucket-notification-configuration --bucket "$BUCKET" --region "$AWS_REGION"
 ```
@@ -78,17 +80,17 @@ The notification configuration should contain `EventBridgeConfiguration`.
 Upload path the pipeline accepts:
 
 ```text
-s3://{organization_id}-invoice-bucket/uploads/{organization_id}/{legal_entity_id}/inbound/{file}.csv
+s3://invoz-${APP_ENV}-invoices/uploads/{organization_id}/{legal_entity_id}/inbound/{file}.csv
 ```
 
-Keys ending in `.csv.tmp` do not match the EventBridge rule. The rule matches every bucket whose name ends with `-invoice-bucket`, so a new organization does not need a new rule.
+Keys ending in `.csv.tmp` do not match the EventBridge rule. The rule matches this bucket only.
 
 ## 2. SFTP
 
-There is no Transfer Family script in this repo. Create one public SFTP server. Add one user per organization, rooted in that organization's bucket. The server is billed for every hour it exists, plus the data uploaded. Set `ORGANIZATION_ID` to the same uuid used in step 1, then:
+There is no Transfer Family script in this repo. Create one public SFTP server. Add one user per organization, chrooted to that organization's prefix in the shared bucket. The server is billed for every hour it exists, plus the data uploaded. `ORGANIZATION_ID` is the uuid from `organizations.id`.
 
 ```bash
-BUCKET="${ORGANIZATION_ID}-invoice-bucket"
+BUCKET="invoz-${APP_ENV}-invoices"
 ```
 
 Create a role Transfer Family can assume. `create-role` and `create-server` fail if that role or server already exists. The npm steps above can be repeated.
@@ -108,7 +110,7 @@ cat > /tmp/transfer-trust.json <<'EOF'
 EOF
 
 aws iam create-role \
-  --role-name ramis-transfer-role \
+  --role-name invoz-${APP_ENV}-transfer \
   --assume-role-policy-document file:///tmp/transfer-trust.json
 
 cat > /tmp/transfer-s3.json <<EOF
@@ -118,24 +120,24 @@ cat > /tmp/transfer-s3.json <<EOF
     {
       "Effect": "Allow",
       "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
-      "Resource": "arn:aws:s3:::*-invoice-bucket"
+      "Resource": "arn:aws:s3:::${BUCKET}"
     },
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:GetObjectVersion"],
-      "Resource": "arn:aws:s3:::*-invoice-bucket/*"
+      "Resource": "arn:aws:s3:::${BUCKET}/*"
     }
   ]
 }
 EOF
 
 aws iam put-role-policy \
-  --role-name ramis-transfer-role \
-  --policy-name ramis-transfer-s3 \
+  --role-name invoz-${APP_ENV}-transfer \
+  --policy-name invoz-${APP_ENV}-transfer-s3 \
   --policy-document file:///tmp/transfer-s3.json
 ```
 
-Create the server once. Create one ERP user per organization. Replace `erp-public-key.pub` with that organization's SSH public key. The session policy limits the user to `BUCKET`. An upload to `/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv` becomes that same key in the organization bucket.
+Create the server once. Create one ERP user per organization. Replace `erp-public-key.pub` with that organization's SSH public key. The home directory maps `/` to `uploads/{organization_id}/`, and the session policy limits the user to that prefix. An upload of `/{legal_entity_id}/inbound/invoice_001.csv` is stored as `uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
 
 ```bash
 SERVER_ID=$(aws transfer create-server \
@@ -159,13 +161,26 @@ cat > /tmp/transfer-session.json <<EOF
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::${BUCKET}",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "uploads/${ORGANIZATION_ID}",
+            "uploads/${ORGANIZATION_ID}/*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetBucketLocation",
       "Resource": "arn:aws:s3:::${BUCKET}"
     },
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:GetObjectVersion"],
-      "Resource": "arn:aws:s3:::${BUCKET}/*"
+      "Resource": "arn:aws:s3:::${BUCKET}/uploads/${ORGANIZATION_ID}/*"
     }
   ]
 }
@@ -175,8 +190,9 @@ aws transfer create-user \
   --region "$AWS_REGION" \
   --server-id "$SERVER_ID" \
   --user-name "$ORGANIZATION_ID" \
-  --role "arn:aws:iam::${ACCOUNT_ID}:role/ramis-transfer-role" \
-  --home-directory "/${BUCKET}" \
+  --role "arn:aws:iam::${ACCOUNT_ID}:role/invoz-${APP_ENV}-transfer" \
+  --home-directory-type LOGICAL \
+  --home-directory-mappings "[{\"Entry\":\"/\",\"Target\":\"/${BUCKET}/uploads/${ORGANIZATION_ID}\"}]" \
   --policy file:///tmp/transfer-session.json \
   --ssh-public-key-body "$(cat erp-public-key.pub)"
 ```
@@ -193,10 +209,10 @@ Creates two FIFO queues:
 
 | Queue | Role |
 | --- | --- |
-| `invoicing-pipeline.fifo` | Work queue. Visibility timeout 300 seconds. Content-based deduplication. |
-| `invoicing-pipeline-dlq.fifo` | Dead-letter queue after 3 receives. |
+| `invoz-${APP_ENV}-invoicing-pipeline.fifo` | Work queue. Visibility timeout 300 seconds. Content-based deduplication. |
+| `invoz-${APP_ENV}-invoicing-pipeline-dlq.fifo` | Dead-letter queue after 3 receives. |
 
-The work queue allows EventBridge rule `ramis-s3-csv-created` to send messages. The rule itself is created in step 5.
+The work queue allows EventBridge rule `invoz-${APP_ENV}-s3-csv-created` to send messages. The rule itself is created in step 5.
 
 ```bash
 npm run provision:sqs -w @invoz/deployment
@@ -205,13 +221,13 @@ npm run provision:sqs -w @invoz/deployment
 Check:
 
 ```bash
-aws sqs get-queue-url --queue-name invoicing-pipeline.fifo --region "$AWS_REGION"
-aws sqs get-queue-url --queue-name invoicing-pipeline-dlq.fifo --region "$AWS_REGION"
+aws sqs get-queue-url --queue-name invoz-${APP_ENV}-invoicing-pipeline.fifo --region "$AWS_REGION"
+aws sqs get-queue-url --queue-name invoz-${APP_ENV}-invoicing-pipeline-dlq.fifo --region "$AWS_REGION"
 ```
 
 ## 4. Lambda
 
-Publishes `invoice-engine` (Node.js 20, 512 MB, 60 second timeout) and maps `invoicing-pipeline.fifo` to it with batch size 5. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must already be exported. The queue from step 3 must exist.
+Publishes `invoz-${APP_ENV}-invoice-engine` (Node.js 20, 512 MB, 60 second timeout) and maps `invoz-${APP_ENV}-invoicing-pipeline.fifo` to it with batch size 5. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must already be exported. The queue from step 3 must exist.
 
 ```bash
 npm run provision:lambda -w @invoz/deployment
@@ -221,25 +237,25 @@ Check:
 
 ```bash
 aws lambda get-function-configuration \
-  --function-name invoice-engine \
+  --function-name invoz-${APP_ENV}-invoice-engine \
   --region "$AWS_REGION" \
   --query '{State:State,Timeout:Timeout,Memory:MemorySize}'
 
 aws lambda list-event-source-mappings \
-  --function-name invoice-engine \
+  --function-name invoz-${APP_ENV}-invoice-engine \
   --region "$AWS_REGION" \
   --query 'EventSourceMappings[].{Queue:EventSourceArn,Batch:BatchSize,State:State}'
 ```
 
-The role can read and write the bucket, consume the work queue, and read Secrets Manager secrets named `ramis/*`. This step does not create a secret.
+The role can read and write the shared invoice bucket, consume the work queue, and read Secrets Manager secrets named `invoz-${APP_ENV}/*`. This step does not create a secret.
 
 Leave `RAMIS_API_URL` empty on this first run. The worker does not receive the variable while it is empty. Step 6 prints the URL. Write that URL into `.env` and run this command again.
 
 ## 5. EventBridge
 
-This is the step that creates rule `ramis-s3-csv-created` on the default event bus. There is no `provision:eventbridge` script. `npm run provision` creates the SQS queues and the `invoice-engine` Lambda if they are missing, then adds the rule. Run it even when the organization bucket from step 1 already exists. Without `ORGANIZATION_ID`, it skips bucket creation.
+This is the step that creates rule `invoz-${APP_ENV}-s3-csv-created` on the default event bus. There is no `provision:eventbridge` script. `npm run provision` creates the shared bucket, the SQS queues, and the `invoz-${APP_ENV}-invoice-engine` Lambda if they are missing, then adds the rule. Run it even when the bucket from step 1 already exists.
 
-The rule matches `Object Created` for keys `uploads/*.csv` on every bucket whose name ends with `-invoice-bucket`. The FIFO message group id is the object key. The queue receives:
+The rule matches `Object Created` for keys `uploads/*.csv` in the shared invoice bucket. The FIFO message group id is the object key. The queue receives:
 
 ```json
 {"source":"s3","bucket":"<bucket>","objectKey":"<key>"}
@@ -267,30 +283,30 @@ Check:
 
 ```bash
 aws events describe-rule \
-  --name ramis-s3-csv-created \
+  --name invoz-${APP_ENV}-s3-csv-created \
   --region "$AWS_REGION" \
   --query '{State:State,Pattern:EventPattern}'
 
 aws events list-targets-by-rule \
-  --rule ramis-s3-csv-created \
+  --rule invoz-${APP_ENV}-s3-csv-created \
   --region "$AWS_REGION"
 ```
 
-The target ARN should be `invoicing-pipeline.fifo`.
+The target ARN should be `invoz-${APP_ENV}-invoicing-pipeline.fifo`.
 
 ## Smoke test
 
 Put a CSV directly in the bucket. This exercises S3, EventBridge, SQS, and Lambda without SFTP.
 
 ```bash
-BUCKET="${ORGANIZATION_ID}-invoice-bucket"
+BUCKET="invoz-${APP_ENV}-invoices"
 echo "sample" > /tmp/invoice_001.csv
 aws s3 cp /tmp/invoice_001.csv \
   "s3://${BUCKET}/uploads/${ORGANIZATION_ID}/entity-id/inbound/invoice_001.csv" \
   --region "$AWS_REGION"
 ```
 
-Then read the queue, or the Lambda log group `/aws/lambda/invoice-engine`, and confirm the object key arrived.
+Then read the queue, or the Lambda log group `/aws/lambda/invoz-${APP_ENV}-invoice-engine`, and confirm the object key arrived.
 
 ## 6. API Gateway
 
@@ -298,8 +314,8 @@ Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with pa
 
 | API name | Lambda | Timeout | Memory | Caller |
 | --- | --- | --- | --- | --- |
-| `ramis-engine` | `ramis-engine` | 30 s | 512 MB | `invoice-engine`, through `RAMIS_API_URL` |
-| `landing-service` | `landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
+| `invoz-{env}-ramis-engine` | `invoz-{env}-ramis-engine` | 30 s | 512 MB | `invoz-{env}-invoice-engine`, through `RAMIS_API_URL` |
+| `invoz-{env}-landing-service` | `invoz-{env}-landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
 
 `RAMIS_DATABASE_URL` must be exported before the RAMIS API. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be exported before the landing API. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`. SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `DEMO_FROM_EMAIL`) are copied when set and used only while that flag is on. See `packages/landing-service/.env.example`.
 
@@ -330,7 +346,7 @@ Check both APIs:
 ```bash
 aws apigatewayv2 get-apis \
   --region "$AWS_REGION" \
-  --query "Items[?Name=='ramis-engine' || Name=='landing-service'].{Name:Name,Endpoint:ApiEndpoint,Protocol:ProtocolType}"
+  --query "Items[?Name=='invoz-${APP_ENV}-ramis-engine' || Name=='invoz-${APP_ENV}-landing-service'].{Name:Name,Endpoint:ApiEndpoint,Protocol:ProtocolType}"
 ```
 
 Health checks:

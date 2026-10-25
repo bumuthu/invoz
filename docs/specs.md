@@ -244,7 +244,7 @@ A person who works for two customers has two memberships and uses two hosts. Sup
 
 ### Architecture Data Flow
 
-* **Step 1 (Ingestion):** The client ERP triggers an automated file export upon invoice posting, uploading the file via SFTP to an AWS S3 bucket (`/uploads/{organization_id}/{legal_entity_id}/inbound/`). Alternatively, modern cloud ERPs post directly to an HTTPS Webhook (`POST /v1/invoices`) for one legal entity.
+* **Step 1 (Ingestion):** The client ERP triggers an automated file export upon invoice posting, uploading the file via SFTP into the shared invoice bucket at `uploads/{organization_id}/{legal_entity_id}/inbound/`. Alternatively, modern cloud ERPs post directly to an HTTPS Webhook (`POST /v1/invoices`) for one legal entity.
 * **Step 2 (Buffering & Sequencing):** S3 triggers an event notification that routes a metadata message into an **Amazon SQS FIFO Queue**. The queue groups messages by `MessageGroupId = {legal_entity_id}:{branch_code}`, guaranteeing strict chronological processing and a separate serial sequence per branch of that legal entity.
 * **Step 3 (Pre-Flight Validation & Formatting):** An **AWS Lambda Worker** reads from SQS FIFO and applies validation logic:
 * Verifies 9-digit buyer and seller TINs.

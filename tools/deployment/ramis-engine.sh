@@ -8,9 +8,7 @@ if [[ -z "${RAMIS_DATABASE_URL:-}" ]]; then
   exit 1
 fi
 
-ENGINE_FUNCTION="${RAMIS_ENGINE_FUNCTION_NAME:-ramis-engine}"
-ENGINE_ROLE="${ENGINE_FUNCTION}-role"
-API_NAME="${RAMIS_ENGINE_API_NAME:-ramis-engine}"
+API_NAME="$ENGINE_API_NAME"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ENGINE_ROLE}"
 
 mkdir -p "$BUILD_DIR"
@@ -45,7 +43,7 @@ echo "bundling @invoz/engine"
   npx esbuild tools/ramis-engine/src/lambda.ts \
     --bundle \
     --platform=node \
-    --target=node20 \
+    --target=node22 \
     --format=cjs \
     --outfile="$BUILD_DIR/ramis-engine.js"
 )
@@ -77,6 +75,7 @@ if aws lambda get-function --function-name "$ENGINE_FUNCTION" --region "$REGION"
   aws lambda update-function-configuration \
     --function-name "$ENGINE_FUNCTION" \
     --region "$REGION" \
+    --runtime nodejs22.x \
     --handler ramis-engine.handler \
     --timeout 30 \
     --memory-size 512 \
@@ -84,29 +83,16 @@ if aws lambda get-function --function-name "$ENGINE_FUNCTION" --region "$REGION"
     >/dev/null
   echo "updated lambda $ENGINE_FUNCTION"
 else
-  created=0
-  for _ in 1 2 3 4 5 6; do
-    if aws lambda create-function \
-      --function-name "$ENGINE_FUNCTION" \
-      --region "$REGION" \
-      --runtime nodejs20.x \
-      --handler ramis-engine.handler \
-      --role "$ROLE_ARN" \
-      --timeout 30 \
-      --memory-size 512 \
-      --zip-file "fileb://$BUILD_DIR/ramis-engine.zip" \
-      --environment "file://$ENV_FILE" \
-      >/dev/null
-    then
-      created=1
-      break
-    fi
-    sleep 5
-  done
-  if [[ "$created" -ne 1 ]]; then
-    echo "lambda role was not ready in time" >&2
-    exit 1
-  fi
+  retry_iam aws lambda create-function \
+    --function-name "$ENGINE_FUNCTION" \
+    --region "$REGION" \
+    --runtime nodejs22.x \
+    --handler ramis-engine.handler \
+    --role "$ROLE_ARN" \
+    --timeout 30 \
+    --memory-size 512 \
+    --zip-file "fileb://$BUILD_DIR/ramis-engine.zip" \
+    --environment "file://$ENV_FILE"
   echo "created lambda $ENGINE_FUNCTION"
 fi
 

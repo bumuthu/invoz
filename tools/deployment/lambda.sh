@@ -57,17 +57,17 @@ cat >"$BUILD_DIR/permissions.json" <<EOF
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::*${BUCKET_SUFFIX}/*"
+      "Resource": "arn:aws:s3:::${INVOICE_BUCKET}/*"
     },
     {
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::*${BUCKET_SUFFIX}"
+      "Resource": "arn:aws:s3:::${INVOICE_BUCKET}"
     },
     {
       "Effect": "Allow",
       "Action": "secretsmanager:GetSecretValue",
-      "Resource": "arn:aws:secretsmanager:$REGION:$ACCOUNT_ID:secret:ramis/*"
+      "Resource": "arn:aws:secretsmanager:$REGION:$ACCOUNT_ID:secret:invoz-${APP_ENV}/*"
     }
   ]
 }
@@ -125,29 +125,16 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >
     >/dev/null
   echo "updated lambda $FUNCTION_NAME"
 else
-  created=0
-  for _ in 1 2 3 4 5 6; do
-    if aws lambda create-function \
-      --function-name "$FUNCTION_NAME" \
-      --region "$REGION" \
-      --runtime nodejs22.x \
-      --handler index.handler \
-      --role "$ROLE_ARN" \
-      --timeout 60 \
-      --memory-size 512 \
-      --zip-file "fileb://$BUILD_DIR/function.zip" \
-      --environment "file://$ENV_FILE" \
-      >/dev/null
-    then
-      created=1
-      break
-    fi
-    sleep 5
-  done
-  if [[ "$created" -ne 1 ]]; then
-    echo "lambda role was not ready in time" >&2
-    exit 1
-  fi
+  retry_iam aws lambda create-function \
+    --function-name "$FUNCTION_NAME" \
+    --region "$REGION" \
+    --runtime nodejs22.x \
+    --handler index.handler \
+    --role "$ROLE_ARN" \
+    --timeout 60 \
+    --memory-size 512 \
+    --zip-file "fileb://$BUILD_DIR/function.zip" \
+    --environment "file://$ENV_FILE"
   echo "created lambda $FUNCTION_NAME"
 fi
 
@@ -159,13 +146,12 @@ MAPPING=$(aws lambda list-event-source-mappings \
   --output text)
 
 if [[ -z "$MAPPING" || "$MAPPING" == "None" ]]; then
-  aws lambda create-event-source-mapping \
+  retry_iam aws lambda create-event-source-mapping \
     --function-name "$FUNCTION_NAME" \
     --event-source-arn "$QUEUE_ARN" \
     --region "$REGION" \
     --batch-size 5 \
-    --function-response-types ReportBatchItemFailures \
-    >/dev/null
+    --function-response-types ReportBatchItemFailures
   echo "mapped $QUEUE_NAME to $FUNCTION_NAME"
 else
   aws lambda update-event-source-mapping \

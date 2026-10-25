@@ -8,9 +8,9 @@ if [[ -z "${SUPABASE_URL:-}${NEXT_PUBLIC_SUPABASE_URL:-}" || -z "${SUPABASE_SERV
   exit 1
 fi
 
-FUNCTION_NAME="${LANDING_FUNCTION_NAME:-landing-service}"
-ROLE_NAME="${FUNCTION_NAME}-role"
-API_NAME="${LANDING_API_NAME:-landing-service}"
+FUNCTION_NAME="$LANDING_FUNCTION"
+ROLE_NAME="$LANDING_ROLE"
+API_NAME="$LANDING_API_NAME"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 
 mkdir -p "$BUILD_DIR"
@@ -88,29 +88,16 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >
     >/dev/null
   echo "updated lambda $FUNCTION_NAME"
 else
-  created=0
-  for _ in 1 2 3 4 5 6; do
-    if aws lambda create-function \
-      --function-name "$FUNCTION_NAME" \
-      --region "$REGION" \
-      --runtime nodejs22.x \
-      --handler landing-service.handler \
-      --role "$ROLE_ARN" \
-      --timeout 20 \
-      --memory-size 256 \
-      --zip-file "fileb://$BUILD_DIR/landing-service.zip" \
-      --environment "file://$ENV_FILE" \
-      >/dev/null
-    then
-      created=1
-      break
-    fi
-    sleep 5
-  done
-  if [[ "$created" -ne 1 ]]; then
-    echo "lambda role was not ready in time" >&2
-    exit 1
-  fi
+  retry_iam aws lambda create-function \
+    --function-name "$FUNCTION_NAME" \
+    --region "$REGION" \
+    --runtime nodejs22.x \
+    --handler landing-service.handler \
+    --role "$ROLE_ARN" \
+    --timeout 20 \
+    --memory-size 256 \
+    --zip-file "fileb://$BUILD_DIR/landing-service.zip" \
+    --environment "file://$ENV_FILE"
   echo "created lambda $FUNCTION_NAME"
 fi
 

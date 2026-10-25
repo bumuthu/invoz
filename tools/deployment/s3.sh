@@ -3,13 +3,8 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require_aws
 
-if [[ -z "${ORGANIZATION_ID:-}" ]]; then
-  echo "ORGANIZATION_ID is required. The bucket name is {organization uuid}${BUCKET_SUFFIX}." >&2
-  exit 1
-fi
-
-BUCKET=$(org_bucket "$ORGANIZATION_ID") || exit 1
 mkdir -p "$BUILD_DIR"
+BUCKET="$INVOICE_BUCKET"
 
 if aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
   echo "s3 bucket $BUCKET already exists"
@@ -42,4 +37,4 @@ aws s3api put-bucket-notification-configuration \
   --notification-configuration '{"EventBridgeConfiguration":{}}'
 
 echo "s3://$BUCKET sends object-created events to EventBridge"
-echo "upload prefix: uploads/{organization_id}/{legal_entity_id}/inbound/*.csv"
+echo "organization prefix: uploads/{organization_id}/{legal_entity_id}/inbound/*.csv"

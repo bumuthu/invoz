@@ -17,9 +17,9 @@ flowchart LR
   s3[S3]
   events[EventBridge]
   fifo[SQS FIFO]
-  lambda["Lambda<br/>@invoz/invoice-engine"]
+  lambda["Lambda<br/>invoz-{env}-invoice-engine"]
   apigw[API Gateway]
-  engine["Lambda<br/>ramis-engine"]
+  engine["Lambda<br/>invoz-{env}-ramis-engine"]
   secrets[Secrets Manager]
   dlq[SQS FIFO DLQ]
   db[("Supabase Postgres")]
@@ -43,14 +43,14 @@ flowchart LR
 
 | Tier | Service | Role |
 | --- | --- | --- |
-| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user is rooted in that organization's bucket. ERP SSH keys land in `/uploads/{organization_id}/{legal_entity_id}/inbound/`. |
-| Storage | Amazon S3 | One bucket per organization, named `{organization_id}-invoice-bucket`. Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
+| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user is chrooted to `uploads/{organization_id}/` in the shared bucket. The ERP writes `/{legal_entity_id}/inbound/`. |
+| Storage | Amazon S3 | One bucket, `invoz-{env}-invoices`. `{env}` is `APP_ENV`: `stag` or `prod`. Each organization is the prefix `uploads/{organization_id}/`. Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
 | Routing | Amazon EventBridge | Forwards a created-object event into the FIFO queue. |
-| Sequencing | Amazon SQS FIFO `invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
-| Worker | AWS Lambda `invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@invoz/invoice-engine`. Parses the file with that legal entity's field mapping, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
-| RAMIS stand-in | AWS Lambda `ramis-engine` | One function behind an HTTP API. Every route is handled by `handler` in `tools/ramis-engine/src/lambda.ts`. |
+| Sequencing | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
+| Worker | AWS Lambda `invoz-{env}-invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@invoz/invoice-engine`. Parses the file with that legal entity's field mapping, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
+| RAMIS stand-in | AWS Lambda `invoz-{env}-ramis-engine` | One function behind an HTTP API of the same name. Every route is handled by `handler` in `tools/ramis-engine/src/lambda.ts`. |
 | Certificates | AWS Secrets Manager | RAMIS client certificate and private key, encrypted with KMS. `ramis_credentials.certificate_secret_arn` stores the ARN. |
-| Failures | Amazon SQS FIFO `invoicing-pipeline-dlq.fifo` | Messages that still fail after 3 receives. Unparseable files and permanent 4xx outcomes are recorded as rejected before that. |
+| Failures | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline-dlq.fifo` | Messages that still fail after 3 receives. Unparseable files and permanent 4xx outcomes are recorded as rejected before that. |
 | Operations | CloudWatch and SNS | Queue depth, Lambda duration, and DLQ alarms. |
 
 A legal entity keeps its own serial lane per branch. The FIFO group is `{legalEntityId}:{branchCode}`, not the organization id. Two subsidiaries in one organization must not share a sequence.
@@ -60,9 +60,9 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 ## Processing flow
 
 1. The ERP uploads `invoice_001.csv` through Transfer Family.
-2. Transfer Family writes `s3://{organization_id}-invoice-bucket/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
+2. Transfer Family writes `s3://invoz-{env}-invoices/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
 3. S3 emits an object-created event to EventBridge.
-4. EventBridge sends a message to `invoicing-pipeline.fifo` with `MessageGroupId = {legalEntityId}:{branchCode}`.
+4. EventBridge sends a message to `invoz-{env}-invoicing-pipeline.fifo` with `MessageGroupId = {legalEntityId}:{branchCode}`.
 5. Lambda reads the message and runs `handler` from `@invoz/invoice-engine`:
    * download and parse the file with the legal entity field mapping
    * check 9-digit TINs, separate invoice and supply dates, and VAT math
@@ -80,11 +80,11 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 sequenceDiagram
   participant ERP
   participant S3
-  participant FIFO as invoicing-pipeline.fifo
-  participant Lambda as invoice-engine
+  participant FIFO as invoz-env-invoicing-pipeline.fifo
+  participant Lambda as invoz-env-invoice-engine
   participant DB as Supabase Postgres
   participant API as API Gateway
-  participant Engine as ramis-engine
+  participant Engine as invoz-env-ramis-engine
   participant RAMIS as RAMIS Postgres
 
   ERP->>S3: invoice_001.csv
@@ -104,7 +104,7 @@ sequenceDiagram
 
 ## RAMIS engine
 
-`tools/ramis-engine` is the RAMIS Web API stand-in. It is one Lambda function, `ramis-engine`, invoked by an HTTP API (`payload format 2.0`). API Gateway sends every method and path to `handler`. The invoice-engine Lambda is the caller and does not import the engine.
+`tools/ramis-engine` is the RAMIS Web API stand-in. It is one Lambda function, `invoz-{env}-ramis-engine`, invoked by an HTTP API of the same name (`payload format 2.0`). API Gateway sends every method and path to `handler`. The invoice-engine Lambda is the caller and does not import the engine.
 
 Lambda execution environments do not share memory, so clearance state is not kept in the process. The engine uses `RAMIS_DATABASE_URL`. On Supabase that URL still points at the project, and `npm run migrate` writes the engine tables into schema `ramis_engine` of the `postgres` database. That is the database shown in the project. The portal tables stay in schema `public`.
 
@@ -200,7 +200,7 @@ invoz
 | --- | --- |
 | `entities` | Domain types and enums: `PortalRole`, `InvoiceClass`, `AdjustmentType`, `RamisStatus`, `MatchingStatus` |
 | `models` | Snake-case row types, `tableColumns`, and row-to-entity mappers |
-| `queues` | `invoicing-pipeline.fifo`, `invoicing-pipeline-dlq.fifo`, `InvoiceJob`, `invoiceMessageGroupId`, `invoiceMessageDeduplicationId`, `parseInvoiceJob` |
+| `queues` | `queueNames(env)` for `invoz-{env}-invoicing-pipeline.fifo` and `invoz-{env}-invoicing-pipeline-dlq.fifo`, `InvoiceJob`, `invoiceMessageGroupId`, `invoiceMessageDeduplicationId`, `parseInvoiceJob` |
 | `utils` | Slug, TIN, branch code, payload hash, Gazette serial formatting, `portalRoleLabel` |
 
 An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source` (`s3` or `webhook`). S3 jobs include `objectKey`. Webhook jobs include `payload`.
@@ -221,4 +221,4 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run provision` | `tools/deployment/provision.sh` |
 | `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
 
-`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_ROOT_DOMAIN`). `npm run provision` reads `AWS_REGION`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`. `npm run provision:ramis` reads `RAMIS_DATABASE_URL` and `RAMIS_MOCK_CLIENT_SECRET`. Copy `tools/deployment/env.example` and `tools/ramis-engine/.env.example` to set them.
+`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_ROOT_DOMAIN`). `npm run provision` reads `APP_ENV` (`stag` or `prod`), `AWS_REGION`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. `npm run provision:ramis` reads `RAMIS_DATABASE_URL` and `RAMIS_MOCK_CLIENT_SECRET`. Copy `tools/deployment/env.example` and `tools/ramis-engine/.env.example` to set them.

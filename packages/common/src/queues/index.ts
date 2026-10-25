@@ -1,11 +1,16 @@
 import { isPayloadHash } from "../utils";
 
-export const queueNames = {
-  invoiceJobs: "invoicing-pipeline.fifo",
-  invoiceJobsDlq: "invoicing-pipeline-dlq.fifo",
-} as const;
+export const deployEnvironments = ["stag", "prod"] as const;
+export type DeployEnvironment = (typeof deployEnvironments)[number];
 
-export type QueueName = (typeof queueNames)[keyof typeof queueNames];
+export function queueNames(env: DeployEnvironment) {
+  return {
+    invoiceJobs: `invoz-${env}-invoicing-pipeline.fifo`,
+    invoiceJobsDlq: `invoz-${env}-invoicing-pipeline-dlq.fifo`,
+  } as const;
+}
+
+export type QueueName = ReturnType<typeof queueNames>[keyof ReturnType<typeof queueNames>];
 
 export const invoiceSources = ["s3", "webhook"] as const;
 export type InvoiceSource = (typeof invoiceSources)[number];
