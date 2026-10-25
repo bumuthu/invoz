@@ -16,7 +16,7 @@ cat >"$BUILD_DIR/s3-rule.json" <<EOF
   "detail-type": ["Object Created"],
   "detail": {
     "bucket": { "name": ["${INVOICE_BUCKET}"] },
-    "object": { "key": [{ "wildcard": "uploads/*.csv" }] }
+    "object": { "key": [{ "wildcard": "uploads/*/inbound/*.csv" }] }
   }
 }
 EOF

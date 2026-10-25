@@ -74,7 +74,7 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
    * **HTTP 5xx or timeout:** the worker throws, the message becomes visible again, and SQS retries. The document is not marked rejected.
 7. `portal-app` reads Supabase for the clearance queue, Schedule 02 matching, and the allowance. A signed-in user's membership supplies the organization id. See Portal authentication.
 
-`processInvoiceJob` checks that the legal entity belongs to the organization on the job. Submission to the engine is not wired yet, so the job still fails and SQS retries. The engine itself is ready to receive that call.
+`processInvoiceJob` checks that the legal entity belongs to the organization on the job, then posts the invoice to the RAMIS engine at `RAMIS_API_URL`. Staging uses the `invoz-stag-ramis-engine` mock. The client secret is `RAMIS_MOCK_CLIENT_SECRET`.
 
 ```mermaid
 sequenceDiagram
@@ -106,19 +106,14 @@ sequenceDiagram
 
 `tools/ramis-engine` is the RAMIS Web API stand-in. It is one Lambda function, `invoz-{env}-ramis-engine`, invoked by an HTTP API of the same name (`payload format 2.0`). API Gateway sends every method and path to `handler`. The invoice-engine Lambda is the caller and does not import the engine.
 
-Lambda execution environments do not share memory, so clearance state is not kept in the process. The engine uses `RAMIS_DATABASE_URL`. On Supabase that URL still points at the project, and `npm run migrate` writes the engine tables into schema `ramis_engine` of the `postgres` database. That is the database shown in the project. The portal tables stay in schema `public`.
-
-The database holds cleared invoices, adjustments, idempotency keys, Schedule 02 approval, and the record and batch counters. A transaction takes an advisory lock on the idempotency key and the serial before it writes, so two concurrent invocations cannot clear the same serial twice or bind one idempotency key to two payloads. A rejected write rolls back. A later invocation reads the same rows.
-
-Local `npm run dev:ramis` uses that database when `RAMIS_DATABASE_URL` is set, and an in-memory ledger when it is not. The deployed function requires the URL. Request throttling stays in the execution environment. Clearance state does not.
+The mock stores clearances in schema `ramis_engine` and nowhere else. `search_path` is `ramis_engine`. Portal tables in `public` are not visible to it. The request body is still validated as the IRD invoice payload. `RAMIS_DATABASE_URL` points at database `postgres`; the schema comes from that connection, not from the portal schema.
 
 | Path | Role |
 | --- | --- |
 | `src/lambda.ts` | API Gateway entry. One handler for token, Schedule 01, Schedule 02, Schedule 04, and health. |
 | `openapi.yaml` | OpenAPI document. Served at `/openapi.yaml`. Swagger UI is at `/docs`. |
 | `src/server.ts` | Same routes for the local HTTP server. |
-| `src/postgres-store.ts` | Ledger reads and writes. |
-| `migrations/` | Engine tables. `npm run migrate` pushes them to `RAMIS_DATABASE_URL`. |
+| `src/postgres-store.ts` | Ledger reads and writes in schema `ramis_engine`. |
 
 `npm run provision:ramis` bundles that function, publishes it, and attaches the HTTP API. It prints the invoke URL. Set that URL as `RAMIS_API_URL` on the invoice-engine Lambda. The client secret is `RAMIS_MOCK_CLIENT_SECRET`.
 

@@ -94,7 +94,7 @@ while IFS=$'\t' read -r key file; do
     exit 1
   fi
   if [[ "$changed" -eq 0 ]]; then
-    echo "already in bucket: $key"
+    # echo "already in bucket: $key"
     already=$((already + 1))
     continue
   fi

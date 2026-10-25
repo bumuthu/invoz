@@ -4,7 +4,7 @@ source "$(dirname "$0")/lib.sh"
 require_aws
 
 if [[ -z "${RAMIS_DATABASE_URL:-}" ]]; then
-  echo "RAMIS_DATABASE_URL is required. It must not be the portal Supabase database." >&2
+  echo "RAMIS_DATABASE_URL is required. The engine uses schema ramis_engine only." >&2
   exit 1
 fi
 

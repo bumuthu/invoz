@@ -26,6 +26,7 @@ export type InvoiceJob = {
 };
 
 const inboundKeyPattern = /^uploads\/([^/]+)\/([^/]+)\/inbound\/[^/]+\.csv$/;
+const settledKeyPattern = /^uploads\/[^/]+\/[^/]+\/(?:processed|rejected|acknowledgments)\/[^/]+\.csv$/;
 
 export function invoiceIdsFromObjectKey(objectKey: string): {
   organizationId: string;
@@ -38,6 +39,10 @@ export function invoiceIdsFromObjectKey(objectKey: string): {
     throw new Error("objectKey must be uploads/{organizationId}/{legalEntityId}/inbound/{file}.csv");
   }
   return { organizationId: match[1], legalEntityId: match[2], objectKey: key };
+}
+
+export function isSettledInvoiceKey(objectKey: string): boolean {
+  return settledKeyPattern.test(decodeObjectKey(objectKey));
 }
 
 function decodeObjectKey(objectKey: string): string {

@@ -41,7 +41,7 @@ cp tools/deployment/env.example tools/deployment/.env
 | `ORGANIZATION_ID` | SFTP, per organization | Organization uuid from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
 | `SUPABASE_URL` | `invoice-engine`, landing API | Portal database API URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | `invoice-engine`, landing API | Service role key for that project. |
-| `RAMIS_DATABASE_URL` | RAMIS API | Engine database URL. Separate from the portal database. |
+| `RAMIS_DATABASE_URL` | RAMIS API | Postgres URL. The engine uses schema `ramis_engine` only. |
 | `RAMIS_MOCK_CLIENT_SECRET` | RAMIS API | Client secret the engine checks. |
 | `RAMIS_API_URL` | `invoice-engine` | Base URL of the RAMIS HTTP API. Leave empty until step 6. No path. |
 
@@ -255,7 +255,7 @@ Leave `RAMIS_API_URL` empty on this first run. The worker does not receive the v
 
 This is the step that creates rule `invoz-${APP_ENV}-s3-csv-created` on the default event bus. There is no `provision:eventbridge` script. `npm run provision` creates the shared bucket, the SQS queues, and the `invoz-${APP_ENV}-invoice-engine` Lambda if they are missing, then adds the rule. Run it even when the bucket from step 1 already exists.
 
-The rule matches `Object Created` for keys `uploads/*.csv` in the shared invoice bucket. The FIFO message group id is the object key. The queue receives:
+The rule matches `Object Created` for keys `uploads/*/inbound/*.csv` in the shared invoice bucket. A copy into `processed/`, `rejected/`, or `acknowledgments/` does not start another job. The FIFO message group id is the object key. The queue receives:
 
 ```json
 {"source":"s3","bucket":"<bucket>","objectKey":"<key>"}
@@ -333,7 +333,7 @@ Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with pa
 | `invoz-{env}-ramis-engine` | `invoz-{env}-ramis-engine` | 30 s | 512 MB | `invoz-{env}-invoice-engine`, through `RAMIS_API_URL` |
 | `invoz-{env}-landing-service` | `invoz-{env}-landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
 
-`RAMIS_DATABASE_URL` must be exported before the RAMIS API. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be exported before the landing API. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`. SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `DEMO_FROM_EMAIL`) are copied when set and used only while that flag is on. See `packages/landing-service/.env.example`.
+`RAMIS_DATABASE_URL` must be exported before the RAMIS API. The function sets `search_path` to `ramis_engine`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be exported before the landing API. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`. SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `DEMO_FROM_EMAIL`) are copied when set and used only while that flag is on. See `packages/landing-service/.env.example`.
 
 ```bash
 npm run provision:ramis

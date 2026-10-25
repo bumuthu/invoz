@@ -52,7 +52,7 @@ async function connectSupabaseSchema(databaseUrl: string, options: Options): Pro
   } finally {
     await admin.end({ timeout: 5 });
   }
-  const sql = postgres(portalUrl, { ...options, connection: { search_path: schema } });
+  const sql = postgres(portalUrl, { ...options, connection: { search_path: engineSchema } });
   const placed = await sql<{ schema: string }[]>`select current_schema() as schema`;
   if (placed[0]?.schema !== schema) {
     await sql.end({ timeout: 5 });
@@ -73,13 +73,19 @@ async function dropSeparateDatabase(admin: postgres.Sql, name: string): Promise<
   console.log(`moved engine tables to schema ${name} in database postgres`);
 }
 
+const engineSchema = "ramis_engine";
+
 function schemaName(url: URL): string {
   const name = decodeURIComponent(url.pathname.replace(/^\//, ""));
-  return name === "" || name === "postgres" ? "ramis" : name;
+  if (name !== "" && name !== "postgres" && name !== engineSchema) {
+    throw new Error("RAMIS_DATABASE_URL must use schema ramis_engine");
+  }
+  return engineSchema;
 }
 
 function isSupabase(databaseUrl: string): boolean {
-  return new URL(databaseUrl).hostname.endsWith(".supabase.co");
+  const host = new URL(databaseUrl).hostname;
+  return host.endsWith(".supabase.co") || host.endsWith(".pooler.supabase.com");
 }
 
 function clientOptions(databaseUrl: string): Options {

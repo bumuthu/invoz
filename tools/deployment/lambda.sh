@@ -104,6 +104,9 @@ variables = {
 api = os.environ.get("RAMIS_API_URL", "").strip()
 if api:
     variables["RAMIS_API_URL"] = api
+secret = os.environ.get("RAMIS_MOCK_CLIENT_SECRET", "").strip()
+if secret:
+    variables["RAMIS_MOCK_CLIENT_SECRET"] = secret
 with open(os.environ["ENV_FILE"], "w") as handle:
     json.dump({"Variables": variables}, handle)
 PY
