@@ -294,6 +294,22 @@ aws events list-targets-by-rule \
 
 The target ARN should be `invoz-${APP_ENV}-invoicing-pipeline.fifo`.
 
+## Upload invoices
+
+Inbound CSVs for each environment live in `tools/invoice-uploader`:
+
+```text
+tools/invoice-uploader/invoices/{env}/{organization_id}/{legal_entity_id}/inbound/{file}.csv
+```
+
+`{env}` is `stag` or `prod`. The sync puts those files at the same keys an SFTP upload uses. A file is sent when the key is missing, or the local copy is newer or a different size. `.csv.tmp` files and any file outside `inbound/` are skipped.
+
+```bash
+npm run sync:invoices -- stag
+```
+
+With no argument, the script uses `APP_ENV`. `AWS_REGION` defaults to `ap-south-1`.
+
 ## Smoke test
 
 Put a CSV directly in the bucket. This exercises S3, EventBridge, SQS, and Lambda without SFTP.

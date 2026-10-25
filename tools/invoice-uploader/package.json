@@ -1,0 +1,7 @@
+{
+  "name": "@invoz/invoice-uploader",
+  "private": true,
+  "scripts": {
+    "sync": "bash sync.sh"
+  }
+}

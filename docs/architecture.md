@@ -203,7 +203,7 @@ invoz
 | `queues` | `queueNames(env)` for `invoz-{env}-invoicing-pipeline.fifo` and `invoz-{env}-invoicing-pipeline-dlq.fifo`, `InvoiceJob`, `invoiceMessageGroupId`, `invoiceMessageDeduplicationId`, `parseInvoiceJob` |
 | `utils` | Slug, TIN, branch code, payload hash, Gazette serial formatting, `portalRoleLabel` |
 
-An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source` (`s3` or `webhook`). S3 jobs include `objectKey`. Webhook jobs include `payload`.
+An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source` (`s3` or `webhook`). An upload from the invoice uploader and an upload from SFTP are the same object: `uploads/{organizationId}/{legalEntityId}/inbound/{file}.csv`. The queue message carries `bucket` and `objectKey`. The worker reads the organization and legal entity from that key and the branch from the file, using the legal entity's field mapping. Webhook jobs include `payload`.
 
 ## Commands
 

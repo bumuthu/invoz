@@ -18,11 +18,39 @@ export type InvoiceSource = (typeof invoiceSources)[number];
 export type InvoiceJob = {
   organizationId: string;
   legalEntityId: string;
-  branchCode: string;
+  branchCode?: string;
   source: InvoiceSource;
+  bucket?: string;
   objectKey?: string;
   payload?: unknown;
 };
+
+const inboundKeyPattern = /^uploads\/([^/]+)\/([^/]+)\/inbound\/[^/]+\.csv$/;
+
+export function invoiceIdsFromObjectKey(objectKey: string): {
+  organizationId: string;
+  legalEntityId: string;
+  objectKey: string;
+} {
+  const key = decodeObjectKey(objectKey);
+  const match = inboundKeyPattern.exec(key);
+  if (!match) {
+    throw new Error("objectKey must be uploads/{organizationId}/{legalEntityId}/inbound/{file}.csv");
+  }
+  return { organizationId: match[1], legalEntityId: match[2], objectKey: key };
+}
+
+function decodeObjectKey(objectKey: string): string {
+  const key = objectKey.replace(/^\//, "");
+  if (!key.includes("%")) {
+    return key;
+  }
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    return key;
+  }
+}
 
 const sources = new Set<string>(invoiceSources);
 
@@ -43,26 +71,56 @@ export function parseInvoiceJob(body: string): InvoiceJob {
     throw new Error("Queue body must be an object");
   }
 
-  const job = value as Partial<InvoiceJob>;
-  if (!job.organizationId || !job.legalEntityId || !job.branchCode) {
-    throw new Error("organizationId, legalEntityId, and branchCode are required");
-  }
-  if (!job.source || !sources.has(job.source)) {
+  const job = value as {
+    organizationId?: unknown;
+    legalEntityId?: unknown;
+    branchCode?: unknown;
+    source?: unknown;
+    bucket?: unknown;
+    objectKey?: unknown;
+    payload?: unknown;
+  };
+  if (typeof job.source !== "string" || !sources.has(job.source)) {
     throw new Error("source must be s3 or webhook");
   }
-  if (job.source === "s3" && !job.objectKey) {
-    throw new Error("s3 jobs require objectKey");
-  }
-  if (job.source === "webhook" && job.payload === undefined) {
-    throw new Error("webhook jobs require payload");
+  const source = job.source as InvoiceSource;
+
+  if (source === "s3") {
+    if (typeof job.objectKey !== "string" || job.objectKey === "") {
+      throw new Error("s3 jobs require objectKey");
+    }
+    const fromKey = invoiceIdsFromObjectKey(job.objectKey);
+    const organizationId = text(job.organizationId);
+    const legalEntityId = text(job.legalEntityId);
+    if (organizationId && organizationId !== fromKey.organizationId) {
+      throw new Error("organizationId does not match objectKey");
+    }
+    if (legalEntityId && legalEntityId !== fromKey.legalEntityId) {
+      throw new Error("legalEntityId does not match objectKey");
+    }
+    return {
+      organizationId: fromKey.organizationId,
+      legalEntityId: fromKey.legalEntityId,
+      branchCode: text(job.branchCode),
+      source,
+      bucket: text(job.bucket),
+      objectKey: fromKey.objectKey,
+      payload: job.payload,
+    };
   }
 
-  return {
-    organizationId: job.organizationId,
-    legalEntityId: job.legalEntityId,
-    branchCode: job.branchCode,
-    source: job.source,
-    objectKey: job.objectKey,
-    payload: job.payload,
-  };
+  const organizationId = text(job.organizationId);
+  const legalEntityId = text(job.legalEntityId);
+  const branchCode = text(job.branchCode);
+  if (!organizationId || !legalEntityId || !branchCode) {
+    throw new Error("organizationId, legalEntityId, and branchCode are required");
+  }
+  if (job.payload === undefined) {
+    throw new Error("webhook jobs require payload");
+  }
+  return { organizationId, legalEntityId, branchCode, source, payload: job.payload };
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
 }

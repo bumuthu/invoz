@@ -19,6 +19,7 @@
     "seed": "npm run seed -w @invoz/supabase",
     "provision": "npm run provision -w @invoz/deployment",
     "provision:ramis": "npm run provision:ramis -w @invoz/deployment",
-    "provision:landing": "npm run provision:landing -w @invoz/deployment"
+    "provision:landing": "npm run provision:landing -w @invoz/deployment",
+    "sync:invoices": "npm run sync -w @invoz/invoice-uploader --"
   }
 }
