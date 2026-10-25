@@ -47,6 +47,48 @@ queue_url() {
   aws sqs get-queue-url --queue-name "$1" --region "$REGION" --query QueueUrl --output text
 }
 
+# Publish every non-empty variable from a package .env. Required names must be present.
+write_lambda_environment() {
+  local env_path="$1"
+  local out_path="$2"
+  shift 2
+  if [[ ! -f "$env_path" ]]; then
+    echo "missing $env_path" >&2
+    echo "copy the env.example in that directory to .env" >&2
+    exit 1
+  fi
+  ENV_PATH="$env_path" ENV_FILE="$out_path" REQUIRED="$*" python3 - <<'PY'
+import json, os
+from pathlib import Path
+
+def parse(text):
+    values = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if key:
+            values[key] = value
+    return values
+
+path = Path(os.environ["ENV_PATH"])
+values = parse(path.read_text())
+missing = [name for name in os.environ["REQUIRED"].split() if not values.get(name, "").strip()]
+if missing:
+    raise SystemExit(f"{path} is missing {', '.join(missing)}")
+variables = {key: value for key, value in values.items() if value != ""}
+Path(os.environ["ENV_FILE"]).write_text(json.dumps({"Variables": variables}))
+print(f"lambda environment from {path}: {' '.join(sorted(variables))}")
+PY
+}
+
 # A new role is not assumable, and its inline policy is not visible, for several seconds.
 retry_iam() {
   local attempt output

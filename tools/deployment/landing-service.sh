@@ -3,11 +3,6 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require_aws
 
-if [[ -z "${SUPABASE_URL:-}${NEXT_PUBLIC_SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
-  echo "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required." >&2
-  exit 1
-fi
-
 FUNCTION_NAME="$LANDING_FUNCTION"
 ROLE_NAME="$LANDING_ROLE"
 API_NAME="$LANDING_API_NAME"
@@ -56,19 +51,8 @@ echo "bundling @invoz/landing-service"
 )
 
 ENV_FILE="$BUILD_DIR/landing-service-env.json"
-ENV_FILE="$ENV_FILE" python3 - <<'PY'
-import json, os
-variables = {
-    "SUPABASE_URL": os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", ""),
-    "SUPABASE_SERVICE_ROLE_KEY": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-}
-for name in ("LANDING_EMAIL_ENABLED", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "DEMO_FROM_EMAIL", "LANDING_ALLOWED_ORIGINS"):
-    value = os.environ.get(name, "").strip()
-    if value:
-        variables[name] = value
-with open(os.environ["ENV_FILE"], "w") as handle:
-    json.dump({"Variables": variables}, handle)
-PY
+write_lambda_environment "$REPO_ROOT/packages/landing-service/.env" "$ENV_FILE" \
+  SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
 
 if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >/dev/null 2>&1; then
   aws lambda update-function-code \

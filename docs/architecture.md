@@ -74,7 +74,7 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
    * **HTTP 5xx or timeout:** the worker throws, the message becomes visible again, and SQS retries. The document is not marked rejected.
 7. `portal-app` reads Supabase for the clearance queue, Schedule 02 matching, and the allowance. A signed-in user's membership supplies the organization id. See Portal authentication.
 
-`processInvoiceJob` checks that the legal entity belongs to the organization on the job, then posts the invoice to the RAMIS engine at `RAMIS_API_URL`. Staging uses the `invoz-stag-ramis-engine` mock. The client secret is `RAMIS_MOCK_CLIENT_SECRET`.
+`processInvoiceJob` checks that the legal entity belongs to the organization on the job, then posts the invoice to the RAMIS engine at `RAMIS_API_URL`. Staging uses the `invoz-stag-ramis-engine` mock. The worker sends `RAMIS_CLIENT_SECRET`. The mock checks that value with `RAMIS_MOCK_CLIENT_SECRET`, which stays on the RAMIS engine.
 
 ```mermaid
 sequenceDiagram
@@ -115,7 +115,7 @@ The mock stores clearances in schema `ramis_engine` and nowhere else. `search_pa
 | `src/server.ts` | Same routes for the local HTTP server. |
 | `src/postgres-store.ts` | Ledger reads and writes in schema `ramis_engine`. |
 
-`npm run provision:ramis` bundles that function, publishes it, and attaches the HTTP API. It prints the invoke URL. Set that URL as `RAMIS_API_URL` on the invoice-engine Lambda. The client secret is `RAMIS_MOCK_CLIENT_SECRET`.
+`npm run provision:ramis` bundles that function, publishes it, and attaches the HTTP API. It prints the invoke URL. Set that URL as `RAMIS_API_URL` on the invoice-engine Lambda. The mock's own secret is `RAMIS_MOCK_CLIENT_SECRET`.
 
 ## Supabase
 
@@ -216,4 +216,4 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run provision` | `tools/deployment/provision.sh` |
 | `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
 
-`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_ROOT_DOMAIN`). `npm run provision` reads `APP_ENV` (`stag` or `prod`), `AWS_REGION`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. `npm run provision:ramis` reads `RAMIS_DATABASE_URL` and `RAMIS_MOCK_CLIENT_SECRET`. Copy `tools/deployment/env.example` and `tools/ramis-engine/.env.example` to set them.
+`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_ROOT_DOMAIN`). `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.

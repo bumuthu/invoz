@@ -3,11 +3,6 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require_aws
 
-if [[ -z "${RAMIS_DATABASE_URL:-}" ]]; then
-  echo "RAMIS_DATABASE_URL is required. The engine uses schema ramis_engine only." >&2
-  exit 1
-fi
-
 API_NAME="$ENGINE_API_NAME"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ENGINE_ROLE}"
 
@@ -55,15 +50,8 @@ cp "$REPO_ROOT/tools/ramis-engine/openapi.yaml" "$BUILD_DIR/openapi.yaml"
 )
 
 ENV_FILE="$BUILD_DIR/ramis-engine-env.json"
-ENV_FILE="$ENV_FILE" python3 - <<'PY'
-import json, os
-variables = {"RAMIS_DATABASE_URL": os.environ["RAMIS_DATABASE_URL"]}
-secret = os.environ.get("RAMIS_MOCK_CLIENT_SECRET", "").strip()
-if secret:
-    variables["RAMIS_MOCK_CLIENT_SECRET"] = secret
-with open(os.environ["ENV_FILE"], "w") as handle:
-    json.dump({"Variables": variables}, handle)
-PY
+write_lambda_environment "$REPO_ROOT/tools/ramis-engine/.env" "$ENV_FILE" \
+  RAMIS_DATABASE_URL RAMIS_MOCK_CLIENT_SECRET
 
 if aws lambda get-function --function-name "$ENGINE_FUNCTION" --region "$REGION" >/dev/null 2>&1; then
   aws lambda update-function-code \
@@ -155,4 +143,4 @@ aws lambda add-permission \
 
 ENDPOINT=$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" --query ApiEndpoint --output text)
 echo "ramis-engine api: ${ENDPOINT}"
-echo "set RAMIS_API_URL=${ENDPOINT} for the invoice-engine Lambda"
+echo "set RAMIS_API_URL=${ENDPOINT} in packages/invoice-engine/.env"

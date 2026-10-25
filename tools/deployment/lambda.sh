@@ -3,11 +3,6 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require_aws
 
-if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
-  echo "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required" >&2
-  exit 1
-fi
-
 if ! aws sqs get-queue-url --queue-name "$QUEUE_NAME" --region "$REGION" >/dev/null 2>&1; then
   echo "create $QUEUE_NAME before the Lambda. Run sqs.sh first." >&2
   exit 1
@@ -95,21 +90,8 @@ echo "bundling @invoz/invoice-engine"
 )
 
 ENV_FILE="$BUILD_DIR/lambda-env.json"
-ENV_FILE="$ENV_FILE" python3 - <<'PY'
-import json, os
-variables = {
-    "SUPABASE_URL": os.environ["SUPABASE_URL"],
-    "SUPABASE_SERVICE_ROLE_KEY": os.environ["SUPABASE_SERVICE_ROLE_KEY"],
-}
-api = os.environ.get("RAMIS_API_URL", "").strip()
-if api:
-    variables["RAMIS_API_URL"] = api
-secret = os.environ.get("RAMIS_MOCK_CLIENT_SECRET", "").strip()
-if secret:
-    variables["RAMIS_MOCK_CLIENT_SECRET"] = secret
-with open(os.environ["ENV_FILE"], "w") as handle:
-    json.dump({"Variables": variables}, handle)
-PY
+write_lambda_environment "$REPO_ROOT/packages/invoice-engine/.env" "$ENV_FILE" \
+  SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY RAMIS_API_URL RAMIS_CLIENT_SECRET
 
 if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >/dev/null 2>&1; then
   aws lambda update-function-code \

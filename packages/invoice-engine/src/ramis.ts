@@ -111,9 +111,9 @@ export async function submitInvoice(
   idempotency: string,
 ): Promise<Clearance> {
   const baseUrl = process.env.RAMIS_API_URL?.replace(/\/+$/, "");
-  const secret = process.env.RAMIS_MOCK_CLIENT_SECRET?.trim();
+  const secret = process.env.RAMIS_CLIENT_SECRET?.trim();
   if (!baseUrl) throw new Error("RAMIS_API_URL is required");
-  if (!secret) throw new Error("RAMIS_MOCK_CLIENT_SECRET is required");
+  if (!secret) throw new Error("RAMIS_CLIENT_SECRET is required");
 
   const token = await accessToken(baseUrl, payload.supplier.tin, secret);
   const requestBody = JSON.stringify(payload);

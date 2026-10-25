@@ -39,11 +39,14 @@ cp tools/deployment/env.example tools/deployment/.env
 | `AWS_REGION` | Every step | Defaults to `ap-south-1` when unset. |
 | `APP_ENV` | Every step | `stag` or `prod`. Prefixes every AWS name. |
 | `ORGANIZATION_ID` | SFTP, per organization | Organization uuid from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
-| `SUPABASE_URL` | `invoice-engine`, landing API | Portal database API URL. |
-| `SUPABASE_SERVICE_ROLE_KEY` | `invoice-engine`, landing API | Service role key for that project. |
-| `RAMIS_DATABASE_URL` | RAMIS API | Postgres URL. The engine uses schema `ramis_engine` only. |
-| `RAMIS_MOCK_CLIENT_SECRET` | RAMIS API | Client secret the engine checks. |
-| `RAMIS_API_URL` | `invoice-engine` | Base URL of the RAMIS HTTP API. Leave empty until step 6. No path. |
+
+Each Lambda takes its environment from the `.env` in its package. `tools/deployment/.env` is not copied onto a function.
+
+| Package | Deploy command |
+| --- | --- |
+| `packages/invoice-engine/.env` | `npm run provision:lambda` |
+| `tools/ramis-engine/.env` | `npm run provision:ramis` |
+| `packages/landing-service/.env` | `npm run provision:landing` |
 
 The shell scripts do not read `.env` on their own. Load it into the shell:
 
@@ -249,7 +252,7 @@ aws lambda list-event-source-mappings \
 
 The role can read and write the shared invoice bucket, consume the work queue, and read Secrets Manager secrets named `invoz-${APP_ENV}/*`. This step does not create a secret.
 
-Leave `RAMIS_API_URL` empty on this first run. The worker does not receive the variable while it is empty. Step 6 prints the URL. Write that URL into `.env` and run this command again.
+The worker environment is `packages/invoice-engine/.env`. `RAMIS_API_URL` in that file is the base URL printed by step 6. Set it, then run `npm run provision:lambda` again.
 
 ## 5. EventBridge
 
@@ -333,7 +336,7 @@ Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with pa
 | `invoz-{env}-ramis-engine` | `invoz-{env}-ramis-engine` | 30 s | 512 MB | `invoz-{env}-invoice-engine`, through `RAMIS_API_URL` |
 | `invoz-{env}-landing-service` | `invoz-{env}-landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
 
-`RAMIS_DATABASE_URL` must be exported before the RAMIS API. The function sets `search_path` to `ramis_engine`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must be exported before the landing API. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`. SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `DEMO_FROM_EMAIL`) are copied when set and used only while that flag is on. See `packages/landing-service/.env.example`.
+`npm run provision:ramis` publishes `tools/ramis-engine/.env`. The function sets `search_path` to `ramis_engine`. `npm run provision:landing` publishes `packages/landing-service/.env`. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`.
 
 ```bash
 npm run provision:ramis
@@ -346,7 +349,7 @@ npm run provision:landing
 https://{api-id}.execute-api.{region}.amazonaws.com
 ```
 
-The region in that host is `AWS_REGION` from `.env`. Paste the printed URL into `RAMIS_API_URL`, load `.env` again, and publish the worker:
+The region in that host is `AWS_REGION` from `tools/deployment/.env`. Paste the printed URL into `RAMIS_API_URL` in `packages/invoice-engine/.env`, then publish the worker:
 
 ```bash
 set -a
