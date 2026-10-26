@@ -1,0 +1,15 @@
+---
+description: Keep SQL migrations and the Prisma schema in sync
+alwaysApply: true
+---
+
+# Schema changes
+
+`supabase/migrations` is the database. `packages/database/prisma/schema.prisma` is the query model. A schema change updates both in the same change.
+
+1. Add a new SQL file under `supabase/migrations`. Do not edit a migration that has already been applied.
+2. Update the matching Prisma model, enum, or index in `schema.prisma`. Use snake_case columns and `@@map` table names. Leave `user_id` and `approved_by` as `String @db.Uuid` with no relation to `auth.users`.
+3. If the column is part of a shared entity, update the row type in `packages/common` and the mapper in `packages/database/src/rows.ts`.
+4. Run `npx prisma generate --schema packages/database/prisma/schema.prisma`. Do not run `prisma migrate` or `prisma db push`.
+
+Do not encode identity start 101, Row-Level Security, grants, or `next_gazette_serial` in Prisma. Those stay in the SQL migration.
