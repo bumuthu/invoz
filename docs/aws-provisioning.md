@@ -83,7 +83,7 @@ The notification configuration should contain `EventBridgeConfiguration`.
 Upload path the pipeline accepts:
 
 ```text
-s3://invoz-${APP_ENV}-invoices/uploads/{organization_id}/{legal_entity_id}/inbound/{file}.csv
+s3://invoz-${APP_ENV}-invoices/uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/{file}.csv
 ```
 
 Keys ending in `.csv.tmp` do not match the EventBridge rule. The rule matches this bucket only.
@@ -140,7 +140,7 @@ aws iam put-role-policy \
   --policy-document file:///tmp/transfer-s3.json
 ```
 
-Create the server once. Create one ERP user per organization. Replace `erp-public-key.pub` with that organization's SSH public key. The home directory maps `/` to `uploads/{organization_id}/`, and the session policy limits the user to that prefix. An upload of `/{legal_entity_id}/inbound/invoice_001.csv` is stored as `uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
+Create the server once. Create one ERP user per organization. Replace `erp-public-key.pub` with that organization's SSH public key. The home directory maps `/` to `uploads/{organization_id}/`, and the session policy limits the user to that prefix. An upload of `/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv` is stored as `uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv`.
 
 ```bash
 SERVER_ID=$(aws transfer create-server \
@@ -302,7 +302,7 @@ The target ARN should be `invoz-${APP_ENV}-invoicing-pipeline.fifo`.
 Inbound CSVs for each environment live in `tools/invoice-uploader`:
 
 ```text
-tools/invoice-uploader/invoices/{env}/{organization_id}/{legal_entity_id}/inbound/{file}.csv
+tools/invoice-uploader/invoices/{env}/{organization_id}/{legal_entity_id}/{branch_id}/inbound/{file}.csv
 ```
 
 `{env}` is `stag` or `prod`. The sync puts those files at the same keys an SFTP upload uses. A file is sent when the key is missing, or the local copy is newer or a different size. `.csv.tmp` files and any file outside `inbound/` are skipped.

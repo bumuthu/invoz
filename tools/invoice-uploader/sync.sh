@@ -2,9 +2,9 @@
 # Upload inbound invoice CSVs for one environment.
 #
 # Local files:
-#   invoices/<stag|prod>/{organization_id}/{legal_entity_id}/inbound/*.csv
+#   invoices/<stag|prod>/{organization_id}/{legal_entity_id}/{branch_id}/inbound/*.csv
 # Destination:
-#   s3://invoz-<env>-invoices/uploads/{organization_id}/{legal_entity_id}/inbound/*.csv
+#   s3://invoz-<env>-invoices/uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/*.csv
 #
 # The destination key is the same key an SFTP upload uses.
 # A file is uploaded when that key is missing, or the local file is newer or a different size.
@@ -15,7 +15,7 @@ set -euo pipefail
 
 usage() {
   echo "usage: sync.sh stag|prod" >&2
-  echo "uploads new invoices/<env>/{organization_id}/{legal_entity_id}/inbound/*.csv files to s3://invoz-<env>-invoices" >&2
+  echo "uploads new invoices/<env>/{organization_id}/{legal_entity_id}/{branch_id}/inbound/*.csv files to s3://invoz-<env>-invoices" >&2
   exit 1
 }
 
@@ -63,7 +63,7 @@ trap 'rm -f "$pending" "$head_error"' EXIT
 ignored=0
 while IFS= read -r file; do
   rel="${file#"$LOCAL_ROOT"/}"
-  if [[ ! "$rel" =~ ^[^/]+/[^/]+/inbound/[^/]+\.csv$ ]]; then
+  if [[ ! "$rel" =~ ^[^/]+/[^/]+/[^/]+/inbound/[^/]+\.csv$ && ! "$rel" =~ ^[^/]+/[^/]+/inbound/[^/]+\.csv$ ]]; then
     echo "ignored $rel"
     ignored=$((ignored + 1))
     continue

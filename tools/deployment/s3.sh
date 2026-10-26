@@ -37,4 +37,4 @@ aws s3api put-bucket-notification-configuration \
   --notification-configuration '{"EventBridgeConfiguration":{}}'
 
 echo "s3://$BUCKET sends object-created events to EventBridge"
-echo "organization prefix: uploads/{organization_id}/{legal_entity_id}/inbound/*.csv"
+echo "organization prefix: uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/*.csv"

@@ -46,7 +46,7 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   const invoices = invoicesFromCsv(csv, (mappings ?? []) as Pick<FieldMappingRow, "source_column" | "target_field">[]);
   let rejected = false;
   for (const invoice of invoices) {
-    const outcome = await submitMappedInvoice(client, entity, job.objectKey, invoice);
+    const outcome = await submitMappedInvoice(client, entity, job.objectKey, job.branchId, invoice);
     if (outcome === "rejected") rejected = true;
   }
   await moveInvoice(job.bucket, job.objectKey, rejected ? "rejected" : "processed");
@@ -70,17 +70,21 @@ async function submitMappedInvoice(
   client: SupabaseClient,
   entity: Pick<LegalEntityRow, "id" | "organization_id" | "name" | "tin">,
   objectKey: string,
+  branchId: string | undefined,
   invoice: MappedInvoice,
 ): Promise<"cleared" | "rejected"> {
   console.log("invoice-engine invoice", JSON.stringify(invoice));
-  const { data: branch, error: branchError } = await client
+  let branchQuery = client
     .from("branches")
     .select("id, name, code")
-    .eq("legal_entity_id", entity.id)
-    .eq("code", invoice.branchCode)
-    .maybeSingle<Pick<BranchRow, "id" | "name" | "code">>();
+    .eq("legal_entity_id", entity.id);
+  branchQuery = branchId ? branchQuery.eq("id", branchId) : branchQuery.eq("code", invoice.branchCode);
+  const { data: branch, error: branchError } = await branchQuery.maybeSingle<Pick<BranchRow, "id" | "name" | "code">>();
   if (branchError) throw new Error(branchError.message);
-  if (!branch) throw new Error(`branch ${invoice.branchCode} is not in this legal entity`);
+  if (!branch) throw new Error(`branch ${branchId ?? invoice.branchCode} is not in this legal entity`);
+  if (branch.code !== invoice.branchCode) {
+    throw new Error(`branch code ${invoice.branchCode} does not match branch ${branch.id}`);
+  }
 
   const existing = await existingInvoice(client, entity.id, invoice.erpReference);
   if (existing?.ramis_status === "cleared") return "cleared";

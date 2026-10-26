@@ -43,7 +43,7 @@ flowchart LR
 
 | Tier | Service | Role |
 | --- | --- | --- |
-| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user is chrooted to `uploads/{organization_id}/` in the shared bucket. The ERP writes `/{legal_entity_id}/inbound/`. |
+| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user is chrooted to `uploads/{organization_id}/` in the shared bucket. The ERP writes `/{legal_entity_id}/{branch_id}/inbound/`. |
 | Storage | Amazon S3 | One bucket, `invoz-{env}-invoices`. `{env}` is `APP_ENV`: `stag` or `prod`. Each organization is the prefix `uploads/{organization_id}/`. Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
 | Routing | Amazon EventBridge | Forwards a created-object event into the FIFO queue. |
 | Sequencing | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
@@ -60,7 +60,7 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 ## Processing flow
 
 1. The ERP uploads `invoice_001.csv` through Transfer Family.
-2. Transfer Family writes `s3://invoz-{env}-invoices/uploads/{organization_id}/{legal_entity_id}/inbound/invoice_001.csv`.
+2. Transfer Family writes `s3://invoz-{env}-invoices/uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv`.
 3. S3 emits an object-created event to EventBridge.
 4. EventBridge sends a message to `invoz-{env}-invoicing-pipeline.fifo` with `MessageGroupId = {legalEntityId}:{branchCode}`.
 5. Lambda reads the message and runs `handler` from `@invoz/invoice-engine`:
@@ -198,7 +198,7 @@ invoz
 | `queues` | `queueNames(env)` for `invoz-{env}-invoicing-pipeline.fifo` and `invoz-{env}-invoicing-pipeline-dlq.fifo`, `InvoiceJob`, `invoiceMessageGroupId`, `invoiceMessageDeduplicationId`, `parseInvoiceJob` |
 | `utils` | Slug, TIN, branch code, payload hash, Gazette serial formatting, `portalRoleLabel` |
 
-An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source` (`s3` or `webhook`). An upload from the invoice uploader and an upload from SFTP are the same object: `uploads/{organizationId}/{legalEntityId}/inbound/{file}.csv`. The queue message carries `bucket` and `objectKey`. The worker reads the organization and legal entity from that key and the branch from the file, using the legal entity's field mapping. Webhook jobs include `payload`.
+An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source` (`s3` or `webhook`). An upload from the invoice uploader and an upload from SFTP are the same object: `uploads/{organizationId}/{legalEntityId}/{branchId}/inbound/{file}.csv`. The queue message carries `bucket` and `objectKey`. The worker reads the organization, legal entity, and branch from that key. The branch code in the file must match that branch. Webhook jobs include `payload`.
 
 ## Commands
 

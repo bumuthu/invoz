@@ -18,6 +18,7 @@ export type InvoiceSource = (typeof invoiceSources)[number];
 export type InvoiceJob = {
   organizationId: string;
   legalEntityId: string;
+  branchId?: string;
   branchCode?: string;
   source: InvoiceSource;
   bucket?: string;
@@ -25,20 +26,24 @@ export type InvoiceJob = {
   payload?: unknown;
 };
 
-const inboundKeyPattern = /^uploads\/([^/]+)\/([^/]+)\/inbound\/[^/]+\.csv$/;
-const settledKeyPattern = /^uploads\/[^/]+\/[^/]+\/(?:processed|rejected|acknowledgments)\/[^/]+\.csv$/;
+const inboundKeyPattern = /^uploads\/([^/]+)\/([^/]+)\/(?:([^/]+)\/)?inbound\/[^/]+\.csv$/;
+const settledKeyPattern =
+  /^uploads\/[^/]+\/[^/]+\/(?:[^/]+\/)?(?:processed|rejected|acknowledgments)\/[^/]+\.csv$/;
 
 export function invoiceIdsFromObjectKey(objectKey: string): {
   organizationId: string;
   legalEntityId: string;
+  branchId?: string;
   objectKey: string;
 } {
   const key = decodeObjectKey(objectKey);
   const match = inboundKeyPattern.exec(key);
   if (!match) {
-    throw new Error("objectKey must be uploads/{organizationId}/{legalEntityId}/inbound/{file}.csv");
+    throw new Error(
+      "objectKey must be uploads/{organizationId}/{legalEntityId}/{branchId}/inbound/{file}.csv",
+    );
   }
-  return { organizationId: match[1], legalEntityId: match[2], objectKey: key };
+  return { organizationId: match[1], legalEntityId: match[2], branchId: match[3], objectKey: key };
 }
 
 export function isSettledInvoiceKey(objectKey: string): boolean {
@@ -106,6 +111,7 @@ export function parseInvoiceJob(body: string): InvoiceJob {
     return {
       organizationId: fromKey.organizationId,
       legalEntityId: fromKey.legalEntityId,
+      branchId: fromKey.branchId,
       branchCode: text(job.branchCode),
       source,
       bucket: text(job.bucket),
