@@ -242,7 +242,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     ...invoiceRows.map((row) => ({
       at: row.created_at,
       invoice: {
-        id: row.id,
+        id: String(row.id),
         serial: row.serial_number ?? "—",
         buyer: row.customer_name,
         buyerTin: row.customer_tin,
@@ -251,7 +251,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
         amount: money(row.amount_exclusive_vat),
         vat: money(row.vat_amount),
         status: labelStatus(row.ramis_status),
-        branch: branchCode.get(row.branch_id) ?? row.branch_id,
+        branch: branchCode.get(row.branch_id) ?? String(row.branch_id),
         entity: entity.name,
         kind: "Tax invoice" as const,
         note: row.error_message ?? undefined,
@@ -262,7 +262,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
       return {
         at: row.created_at,
         invoice: {
-          id: row.id,
+          id: String(row.id),
           serial: row.serial_number ?? "—",
           buyer: original?.customer_name ?? row.reason,
           buyerTin: original?.customer_tin ?? "",
@@ -271,7 +271,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
           amount: money(row.adjusted_amount_exclusive_vat),
           vat: money(row.adjusted_vat_amount),
           status: labelStatus(row.ramis_status),
-          branch: branchCode.get(row.branch_id) ?? row.branch_id,
+          branch: branchCode.get(row.branch_id) ?? String(row.branch_id),
           entity: entity.name,
           kind: "Credit note" as const,
           note: row.error_message ?? undefined,
@@ -326,7 +326,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     ],
     invoices,
     scheduleRows: inboundRows.map((row) => ({
-      id: row.id,
+      id: String(row.id),
       supplier: row.supplier_name,
       tin: row.supplier_tin,
       serial: row.supplier_invoice_number,

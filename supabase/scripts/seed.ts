@@ -94,7 +94,7 @@ async function insertRow(database: Client, table: TableName, row: SeedRow<TableN
     if (refs.has(ref)) {
       throw new Error(`duplicate seed ref ${ref}`);
     }
-    refs.set(ref, inserted.rows[0].id);
+    refs.set(ref, String(inserted.rows[0].id));
   }
 
   console.log(`seeded ${table}${ref ? ` ${ref}` : ""}`);

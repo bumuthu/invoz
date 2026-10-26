@@ -25,8 +25,10 @@ export type RamisStatus = (typeof ramisStatuses)[number];
 export const matchingStatuses = ["unmatched", "matched", "discrepancy"] as const;
 export type MatchingStatus = (typeof matchingStatuses)[number];
 
+export type RowId = number;
+
 export type Organization = {
-  id: string;
+  id: RowId;
   name: string;
   slug: string;
   monthlyAllowance: number;
@@ -34,8 +36,8 @@ export type Organization = {
 };
 
 export type LegalEntity = {
-  id: string;
-  organizationId: string;
+  id: RowId;
+  organizationId: RowId;
   name: string;
   tin: string;
   vatNumber: string | null;
@@ -43,46 +45,46 @@ export type LegalEntity = {
 };
 
 export type Branch = {
-  id: string;
-  legalEntityId: string;
+  id: RowId;
+  legalEntityId: RowId;
   code: string;
   name: string;
   createdAt: string;
 };
 
 export type Membership = {
-  id: string;
+  id: RowId;
   userId: string;
-  organizationId: string;
+  organizationId: RowId;
   role: PortalRole;
   createdAt: string;
 };
 
 export type FieldMapping = {
-  id: string;
-  legalEntityId: string;
+  id: RowId;
+  legalEntityId: RowId;
   sourceColumn: string;
   targetField: string;
 };
 
 export type RamisCredential = {
-  legalEntityId: string;
+  legalEntityId: RowId;
   certificateSecretArn: string;
   updatedAt: string;
 };
 
 export type SerialCounter = {
-  branchId: string;
-  legalEntityId: string;
+  branchId: RowId;
+  legalEntityId: RowId;
   period: string;
   lastValue: number;
 };
 
 export type OutboundInvoice = {
-  id: string;
-  organizationId: string;
-  legalEntityId: string;
-  branchId: string;
+  id: RowId;
+  organizationId: RowId;
+  legalEntityId: RowId;
+  branchId: RowId;
   serialNumber: string | null;
   erpReference: string;
   invoiceType: InvoiceClass;
@@ -107,14 +109,14 @@ export type OutboundInvoice = {
 };
 
 export type OutboundAdjustment = {
-  id: string;
-  organizationId: string;
-  legalEntityId: string;
-  branchId: string;
+  id: RowId;
+  organizationId: RowId;
+  legalEntityId: RowId;
+  branchId: RowId;
   serialNumber: string | null;
   adjustmentType: AdjustmentType;
   erpReference: string;
-  originalInvoiceId: string;
+  originalInvoiceId: RowId;
   originalSerialNumber: string;
   originalInvoiceDate: string;
   reason: string;
@@ -131,9 +133,9 @@ export type OutboundAdjustment = {
 };
 
 export type InboundInvoice = {
-  id: string;
-  organizationId: string;
-  legalEntityId: string;
+  id: RowId;
+  organizationId: RowId;
+  legalEntityId: RowId;
   supplierTin: string;
   supplierName: string;
   supplierInvoiceNumber: string;
@@ -150,9 +152,9 @@ export type InboundInvoice = {
 };
 
 export type InboundAdjustment = {
-  id: string;
-  organizationId: string;
-  legalEntityId: string;
+  id: RowId;
+  organizationId: RowId;
+  legalEntityId: RowId;
   supplierTin: string;
   supplierName: string;
   adjustmentSerialNumber: string;
@@ -169,19 +171,19 @@ export type InboundAdjustment = {
 };
 
 export type InvoiceUsage = {
-  organizationId: string;
+  organizationId: RowId;
   period: string;
   clearedCount: number;
 };
 
 export type AuditLog = {
-  id: string;
-  organizationId: string;
-  legalEntityId: string | null;
-  outboundInvoiceId: string | null;
-  outboundAdjustmentId: string | null;
-  inboundInvoiceId: string | null;
-  inboundAdjustmentId: string | null;
+  id: RowId;
+  organizationId: RowId;
+  legalEntityId: RowId | null;
+  outboundInvoiceId: RowId | null;
+  outboundAdjustmentId: RowId | null;
+  inboundInvoiceId: RowId | null;
+  inboundAdjustmentId: RowId | null;
   event: string;
   detail: Record<string, unknown>;
   createdAt: string;

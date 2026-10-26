@@ -38,7 +38,7 @@ cp tools/deployment/env.example tools/deployment/.env
 | --- | --- | --- |
 | `AWS_REGION` | Every step | Defaults to `ap-south-1` when unset. |
 | `APP_ENV` | Every step | `stag` or `prod`. Prefixes every AWS name. |
-| `ORGANIZATION_ID` | SFTP, per organization | Organization uuid from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
+| `ORGANIZATION_ID` | SFTP, per organization | Organization id from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
 
 Each Lambda takes its environment from the `.env` in its package. `tools/deployment/.env` is not copied onto a function.
 
@@ -62,7 +62,7 @@ Keep that shell open for the steps below.
 
 ## 1. S3
 
-Create one bucket named `invoz-{env}-invoices`. Each organization is the prefix `uploads/{organization uuid}/`. The bucket blocks public access, encrypts objects with SSE-S3, turns on versioning, and allows S3 to send object-created events to EventBridge.
+Create one bucket named `invoz-{env}-invoices`. Each organization is the prefix `uploads/{organization id}/`. The bucket blocks public access, encrypts objects with SSE-S3, turns on versioning, and allows S3 to send object-created events to EventBridge.
 
 This command does not create the EventBridge rule. `aws events describe-rule --name invoz-${APP_ENV}-s3-csv-created` fails with `ResourceNotFoundException` until step 5. A new organization does not need a new bucket or a new rule.
 
@@ -90,7 +90,7 @@ Keys ending in `.csv.tmp` do not match the EventBridge rule. The rule matches th
 
 ## 2. SFTP
 
-There is no Transfer Family script in this repo. Create one public SFTP server. Add one user per organization, chrooted to that organization's prefix in the shared bucket. The server is billed for every hour it exists, plus the data uploaded. `ORGANIZATION_ID` is the uuid from `organizations.id`.
+There is no Transfer Family script in this repo. Create one public SFTP server. Add one user per organization, chrooted to that organization's prefix in the shared bucket. The server is billed for every hour it exists, plus the data uploaded. `ORGANIZATION_ID` is the id from `organizations.id`.
 
 ```bash
 BUCKET="invoz-${APP_ENV}-invoices"

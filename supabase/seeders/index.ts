@@ -4,8 +4,6 @@ import {
   type TableName,
   type Tables,
 } from "@invoz/common";
-import inbound from "./inbound.json";
-import outbound from "./outbound.json";
 import owner from "./owner.json";
 import passwords from "./passwords.json";
 
@@ -57,10 +55,6 @@ function withPasswords(value: object): SeedDocument {
   });
 }
 
-export const seeds: SeedDocument[] = [
-  withPasswords(owner),
-  seedDocument(outbound),
-  seedDocument(inbound),
-];
+export const seeds: SeedDocument[] = [withPasswords(owner)];
 
 export const seedTables = Object.keys(tableColumns) as TableName[];

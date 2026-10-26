@@ -63,7 +63,7 @@ trap 'rm -f "$pending" "$head_error"' EXIT
 ignored=0
 while IFS= read -r file; do
   rel="${file#"$LOCAL_ROOT"/}"
-  if [[ ! "$rel" =~ ^[^/]+/[^/]+/[^/]+/inbound/[^/]+\.csv$ && ! "$rel" =~ ^[^/]+/[^/]+/inbound/[^/]+\.csv$ ]]; then
+  if [[ ! "$rel" =~ ^[1-9][0-9]*/[1-9][0-9]*/[1-9][0-9]*/inbound/[^/]+\.csv$ && ! "$rel" =~ ^[1-9][0-9]*/[1-9][0-9]*/inbound/[^/]+\.csv$ ]]; then
     echo "ignored $rel"
     ignored=$((ignored + 1))
     continue

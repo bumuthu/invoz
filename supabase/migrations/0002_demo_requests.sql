@@ -1,5 +1,5 @@
 create table demo_requests (
-  id uuid primary key default gen_random_uuid(),
+  id bigint generated always as identity (start with 101) primary key,
   name text not null,
   email text not null,
   phone text not null,

@@ -4,10 +4,11 @@ import type {
   MatchingStatus,
   PortalRole,
   RamisStatus,
+  RowId,
 } from "../entities";
 
 export type OrganizationRow = {
-  id: string;
+  id: RowId;
   name: string;
   slug: string;
   monthly_allowance: number;
@@ -15,8 +16,8 @@ export type OrganizationRow = {
 };
 
 export type LegalEntityRow = {
-  id: string;
-  organization_id: string;
+  id: RowId;
+  organization_id: RowId;
   name: string;
   tin: string;
   vat_number: string | null;
@@ -24,46 +25,46 @@ export type LegalEntityRow = {
 };
 
 export type BranchRow = {
-  id: string;
-  legal_entity_id: string;
+  id: RowId;
+  legal_entity_id: RowId;
   code: string;
   name: string;
   created_at: string;
 };
 
 export type MembershipRow = {
-  id: string;
+  id: RowId;
   user_id: string;
-  organization_id: string;
+  organization_id: RowId;
   role: PortalRole;
   created_at: string;
 };
 
 export type FieldMappingRow = {
-  id: string;
-  legal_entity_id: string;
+  id: RowId;
+  legal_entity_id: RowId;
   source_column: string;
   target_field: string;
 };
 
 export type RamisCredentialRow = {
-  legal_entity_id: string;
+  legal_entity_id: RowId;
   certificate_secret_arn: string;
   updated_at: string;
 };
 
 export type SerialCounterRow = {
-  branch_id: string;
-  legal_entity_id: string;
+  branch_id: RowId;
+  legal_entity_id: RowId;
   period: string;
   last_value: number;
 };
 
 export type OutboundInvoiceRow = {
-  id: string;
-  organization_id: string;
-  legal_entity_id: string;
-  branch_id: string;
+  id: RowId;
+  organization_id: RowId;
+  legal_entity_id: RowId;
+  branch_id: RowId;
   serial_number: string | null;
   erp_reference: string;
   invoice_type: InvoiceClass;
@@ -88,14 +89,14 @@ export type OutboundInvoiceRow = {
 };
 
 export type OutboundAdjustmentRow = {
-  id: string;
-  organization_id: string;
-  legal_entity_id: string;
-  branch_id: string;
+  id: RowId;
+  organization_id: RowId;
+  legal_entity_id: RowId;
+  branch_id: RowId;
   serial_number: string | null;
   adjustment_type: AdjustmentType;
   erp_reference: string;
-  original_invoice_id: string;
+  original_invoice_id: RowId;
   original_serial_number: string;
   original_invoice_date: string;
   reason: string;
@@ -112,9 +113,9 @@ export type OutboundAdjustmentRow = {
 };
 
 export type InboundInvoiceRow = {
-  id: string;
-  organization_id: string;
-  legal_entity_id: string;
+  id: RowId;
+  organization_id: RowId;
+  legal_entity_id: RowId;
   supplier_tin: string;
   supplier_name: string;
   supplier_invoice_number: string;
@@ -131,9 +132,9 @@ export type InboundInvoiceRow = {
 };
 
 export type InboundAdjustmentRow = {
-  id: string;
-  organization_id: string;
-  legal_entity_id: string;
+  id: RowId;
+  organization_id: RowId;
+  legal_entity_id: RowId;
   supplier_tin: string;
   supplier_name: string;
   adjustment_serial_number: string;
@@ -150,19 +151,19 @@ export type InboundAdjustmentRow = {
 };
 
 export type InvoiceUsageRow = {
-  organization_id: string;
+  organization_id: RowId;
   period: string;
   cleared_count: number;
 };
 
 export type AuditLogRow = {
-  id: string;
-  organization_id: string;
-  legal_entity_id: string | null;
-  outbound_invoice_id: string | null;
-  outbound_adjustment_id: string | null;
-  inbound_invoice_id: string | null;
-  inbound_adjustment_id: string | null;
+  id: RowId;
+  organization_id: RowId;
+  legal_entity_id: RowId | null;
+  outbound_invoice_id: RowId | null;
+  outbound_adjustment_id: RowId | null;
+  inbound_invoice_id: RowId | null;
+  inbound_adjustment_id: RowId | null;
   event: string;
   detail: Record<string, unknown>;
   created_at: string;

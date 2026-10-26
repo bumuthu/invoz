@@ -16,9 +16,9 @@ export const invoiceSources = ["s3", "webhook"] as const;
 export type InvoiceSource = (typeof invoiceSources)[number];
 
 export type InvoiceJob = {
-  organizationId: string;
-  legalEntityId: string;
-  branchId?: string;
+  organizationId: number;
+  legalEntityId: number;
+  branchId?: number;
   branchCode?: string;
   source: InvoiceSource;
   bucket?: string;
@@ -26,14 +26,15 @@ export type InvoiceJob = {
   payload?: unknown;
 };
 
+const rowIdPattern = /^[1-9][0-9]*$/;
 const inboundKeyPattern = /^uploads\/([^/]+)\/([^/]+)\/(?:([^/]+)\/)?inbound\/[^/]+\.csv$/;
 const settledKeyPattern =
   /^uploads\/[^/]+\/[^/]+\/(?:[^/]+\/)?(?:processed|rejected|acknowledgments)\/[^/]+\.csv$/;
 
 export function invoiceIdsFromObjectKey(objectKey: string): {
-  organizationId: string;
-  legalEntityId: string;
-  branchId?: string;
+  organizationId: number;
+  legalEntityId: number;
+  branchId?: number;
   objectKey: string;
 } {
   const key = decodeObjectKey(objectKey);
@@ -43,7 +44,12 @@ export function invoiceIdsFromObjectKey(objectKey: string): {
       "objectKey must be uploads/{organizationId}/{legalEntityId}/{branchId}/inbound/{file}.csv",
     );
   }
-  return { organizationId: match[1], legalEntityId: match[2], branchId: match[3], objectKey: key };
+  return {
+    organizationId: parseRowId(match[1], "organizationId"),
+    legalEntityId: parseRowId(match[2], "legalEntityId"),
+    branchId: match[3] === undefined ? undefined : parseRowId(match[3], "branchId"),
+    objectKey: key,
+  };
 }
 
 export function isSettledInvoiceKey(objectKey: string): boolean {
@@ -64,7 +70,7 @@ function decodeObjectKey(objectKey: string): string {
 
 const sources = new Set<string>(invoiceSources);
 
-export function invoiceMessageGroupId(legalEntityId: string, branchCode: string): string {
+export function invoiceMessageGroupId(legalEntityId: number, branchCode: string): string {
   return `${legalEntityId}:${branchCode}`;
 }
 
@@ -100,12 +106,10 @@ export function parseInvoiceJob(body: string): InvoiceJob {
       throw new Error("s3 jobs require objectKey");
     }
     const fromKey = invoiceIdsFromObjectKey(job.objectKey);
-    const organizationId = text(job.organizationId);
-    const legalEntityId = text(job.legalEntityId);
-    if (organizationId && organizationId !== fromKey.organizationId) {
+    if (job.organizationId !== undefined && rowId(job.organizationId) !== fromKey.organizationId) {
       throw new Error("organizationId does not match objectKey");
     }
-    if (legalEntityId && legalEntityId !== fromKey.legalEntityId) {
+    if (job.legalEntityId !== undefined && rowId(job.legalEntityId) !== fromKey.legalEntityId) {
       throw new Error("legalEntityId does not match objectKey");
     }
     return {
@@ -120,10 +124,10 @@ export function parseInvoiceJob(body: string): InvoiceJob {
     };
   }
 
-  const organizationId = text(job.organizationId);
-  const legalEntityId = text(job.legalEntityId);
+  const organizationId = rowId(job.organizationId);
+  const legalEntityId = rowId(job.legalEntityId);
   const branchCode = text(job.branchCode);
-  if (!organizationId || !legalEntityId || !branchCode) {
+  if (organizationId === undefined || legalEntityId === undefined || !branchCode) {
     throw new Error("organizationId, legalEntityId, and branchCode are required");
   }
   if (job.payload === undefined) {
@@ -134,4 +138,26 @@ export function parseInvoiceJob(body: string): InvoiceJob {
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function parseRowId(value: string, label: string): number {
+  if (!rowIdPattern.test(value)) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  const id = Number(value);
+  if (!Number.isSafeInteger(id)) {
+    throw new Error(`${label} is too large`);
+  }
+  return id;
+}
+
+function rowId(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && rowIdPattern.test(value)) {
+    const id = Number(value);
+    if (Number.isSafeInteger(id)) return id;
+  }
+  return undefined;
 }

@@ -40,50 +40,50 @@ erDiagram
   INBOUND_ADJUSTMENTS |o--o{ AUDIT_LOGS : "explains"
 
   ORGANIZATIONS {
-    uuid id PK
+    bigint id PK
     text slug UK
     int monthly_allowance
   }
   LEGAL_ENTITIES {
-    uuid id PK
-    uuid organization_id FK
+    bigint id PK
+    bigint organization_id FK
     text tin
   }
   BRANCHES {
-    uuid id PK
-    uuid legal_entity_id FK
+    bigint id PK
+    bigint legal_entity_id FK
     text code
   }
   AUTH_USERS {
     uuid id PK
   }
   MEMBERSHIPS {
-    uuid id PK
+    bigint id PK
     uuid user_id FK
-    uuid organization_id FK
+    bigint organization_id FK
     portal_role role
   }
   FIELD_MAPPINGS {
-    uuid id PK
-    uuid legal_entity_id FK
+    bigint id PK
+    bigint legal_entity_id FK
     text source_column
     text target_field
   }
   RAMIS_CREDENTIALS {
-    uuid legal_entity_id PK
+    bigint legal_entity_id PK
     text certificate_secret_arn
   }
   SERIAL_COUNTERS {
-    uuid branch_id PK
+    bigint branch_id PK
     text period PK
-    uuid legal_entity_id FK
+    bigint legal_entity_id FK
     int last_value
   }
   OUTBOUND_INVOICES {
-    uuid id PK
-    uuid organization_id FK
-    uuid legal_entity_id FK
-    uuid branch_id FK
+    bigint id PK
+    bigint organization_id FK
+    bigint legal_entity_id FK
+    bigint branch_id FK
     text serial_number
     text erp_reference
     invoice_class invoice_type
@@ -93,20 +93,20 @@ erDiagram
     text ramis_payload_hash
   }
   OUTBOUND_ADJUSTMENTS {
-    uuid id PK
-    uuid organization_id FK
-    uuid legal_entity_id FK
-    uuid branch_id FK
-    uuid original_invoice_id FK
+    bigint id PK
+    bigint organization_id FK
+    bigint legal_entity_id FK
+    bigint branch_id FK
+    bigint original_invoice_id FK
     adjustment_type adjustment_type
     text original_serial_number
     text reason
     ramis_status ramis_status
   }
   INBOUND_INVOICES {
-    uuid id PK
-    uuid organization_id FK
-    uuid legal_entity_id FK
+    bigint id PK
+    bigint organization_id FK
+    bigint legal_entity_id FK
     text supplier_tin
     text supplier_invoice_number
     numeric vat_amount
@@ -115,9 +115,9 @@ erDiagram
     uuid approved_by FK
   }
   INBOUND_ADJUSTMENTS {
-    uuid id PK
-    uuid organization_id FK
-    uuid legal_entity_id FK
+    bigint id PK
+    bigint organization_id FK
+    bigint legal_entity_id FK
     text supplier_tin
     text adjustment_serial_number
     text original_invoice_number
@@ -126,18 +126,18 @@ erDiagram
     uuid approved_by FK
   }
   INVOICE_USAGE {
-    uuid organization_id PK
+    bigint organization_id PK
     date period PK
     int cleared_count
   }
   AUDIT_LOGS {
-    uuid id PK
-    uuid organization_id FK
-    uuid legal_entity_id FK
-    uuid outbound_invoice_id FK
-    uuid outbound_adjustment_id FK
-    uuid inbound_invoice_id FK
-    uuid inbound_adjustment_id FK
+    bigint id PK
+    bigint organization_id FK
+    bigint legal_entity_id FK
+    bigint outbound_invoice_id FK
+    bigint outbound_adjustment_id FK
+    bigint inbound_invoice_id FK
+    bigint inbound_adjustment_id FK
     text event
   }
 ```

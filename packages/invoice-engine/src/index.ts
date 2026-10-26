@@ -52,7 +52,7 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   await moveInvoice(job.bucket, job.objectKey, rejected ? "rejected" : "processed");
 }
 
-async function legalEntity(client: SupabaseClient, legalEntityId: string, organizationId: string) {
+async function legalEntity(client: SupabaseClient, legalEntityId: number, organizationId: number) {
   const { data, error } = await client
     .from("legal_entities")
     .select("id, organization_id, name, tin")
@@ -70,7 +70,7 @@ async function submitMappedInvoice(
   client: SupabaseClient,
   entity: Pick<LegalEntityRow, "id" | "organization_id" | "name" | "tin">,
   objectKey: string,
-  branchId: string | undefined,
+  branchId: number | undefined,
   invoice: MappedInvoice,
 ): Promise<"cleared" | "rejected"> {
   console.log("invoice-engine invoice", JSON.stringify(invoice));
@@ -121,7 +121,7 @@ async function submitMappedInvoice(
   }
 }
 
-async function existingInvoice(client: SupabaseClient, legalEntityId: string, erpReference: string) {
+async function existingInvoice(client: SupabaseClient, legalEntityId: number, erpReference: string) {
   const { data, error } = await client
     .from("outbound_invoices")
     .select("id, serial_number, ramis_status")
@@ -132,7 +132,7 @@ async function existingInvoice(client: SupabaseClient, legalEntityId: string, er
   return data;
 }
 
-async function nextSerial(client: SupabaseClient, branchId: string, invoiceDate: string): Promise<string> {
+async function nextSerial(client: SupabaseClient, branchId: number, invoiceDate: string): Promise<string> {
   const { data, error } = await client.rpc("next_gazette_serial", { p_branch_id: branchId, p_on: invoiceDate });
   if (error) throw new Error(error.message);
   if (typeof data !== "string" || data === "") throw new Error("next serial was not returned");
@@ -142,12 +142,12 @@ async function nextSerial(client: SupabaseClient, branchId: string, invoiceDate:
 async function insertQueued(
   client: SupabaseClient,
   entity: Pick<LegalEntityRow, "id" | "organization_id">,
-  branchId: string,
+  branchId: number,
   placeOfSupply: string,
   invoice: MappedInvoice,
   serialNumber: string,
   hash: string,
-): Promise<string> {
+): Promise<number> {
   const exempt = Number(invoice.vatAmount) === 0;
   const invoiceType: InvoiceClass = exempt ? "exempt" : "standard";
   const { data, error } = await client
@@ -174,7 +174,7 @@ async function insertQueued(
       ramis_payload_hash: hash,
     })
     .select("id")
-    .single<{ id: string }>();
+    .single<{ id: number }>();
   if (error) throw new Error(error.message);
   return data.id;
 }

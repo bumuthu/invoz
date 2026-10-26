@@ -1,5 +1,3 @@
-create extension if not exists pgcrypto;
-
 create type portal_role as enum ('owner', 'admin', 'manager', 'staff', 'viewer');
 create type invoice_class as enum ('standard', 'financial_services', 'zero_rated', 'exempt');
 create type adjustment_type as enum ('credit_note', 'debit_note');
@@ -7,7 +5,7 @@ create type ramis_status as enum ('draft', 'validated', 'queued', 'cleared', 're
 create type matching_status as enum ('unmatched', 'matched', 'discrepancy');
 
 create table organizations (
-  id uuid primary key default gen_random_uuid(),
+  id bigint generated always as identity (start with 101) primary key,
   name text not null,
   slug text not null,
   monthly_allowance integer not null default 500,
@@ -19,8 +17,8 @@ create table organizations (
 create unique index organizations_slug_uidx on organizations (slug);
 
 create table legal_entities (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations (id) on delete cascade,
+  id bigint generated always as identity (start with 101) primary key,
+  organization_id bigint not null references organizations (id) on delete cascade,
   name text not null,
   tin text not null,
   vat_number text,
@@ -31,8 +29,8 @@ create table legal_entities (
 create unique index legal_entities_org_tin_uidx on legal_entities (organization_id, tin);
 
 create table branches (
-  id uuid primary key default gen_random_uuid(),
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
+  id bigint generated always as identity (start with 101) primary key,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
   code text not null,
   name text not null,
   created_at timestamptz not null default now(),
@@ -42,9 +40,9 @@ create table branches (
 create unique index branches_entity_code_uidx on branches (legal_entity_id, code);
 
 create table memberships (
-  id uuid primary key default gen_random_uuid(),
+  id bigint generated always as identity (start with 101) primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
-  organization_id uuid not null references organizations (id) on delete cascade,
+  organization_id bigint not null references organizations (id) on delete cascade,
   role portal_role not null,
   created_at timestamptz not null default now(),
   unique (user_id, organization_id)
@@ -55,22 +53,22 @@ create unique index memberships_one_owner_uidx
   where role = 'owner';
 
 create table field_mappings (
-  id uuid primary key default gen_random_uuid(),
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
+  id bigint generated always as identity (start with 101) primary key,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
   source_column text not null,
   target_field text not null,
   unique (legal_entity_id, source_column)
 );
 
 create table ramis_credentials (
-  legal_entity_id uuid primary key references legal_entities (id) on delete cascade,
+  legal_entity_id bigint primary key references legal_entities (id) on delete cascade,
   certificate_secret_arn text not null,
   updated_at timestamptz not null default now()
 );
 
 create table serial_counters (
-  branch_id uuid not null references branches (id) on delete cascade,
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
+  branch_id bigint not null references branches (id) on delete cascade,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
   period text not null,
   last_value integer not null,
   primary key (branch_id, period),
@@ -79,10 +77,10 @@ create table serial_counters (
 );
 
 create table outbound_invoices (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations (id) on delete cascade,
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
-  branch_id uuid not null references branches (id),
+  id bigint generated always as identity (start with 101) primary key,
+  organization_id bigint not null references organizations (id) on delete cascade,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
+  branch_id bigint not null references branches (id),
   serial_number text,
   erp_reference text not null,
   invoice_type invoice_class not null default 'standard',
@@ -126,14 +124,14 @@ create index outbound_invoices_entity_status_idx
   on outbound_invoices (legal_entity_id, ramis_status, created_at desc);
 
 create table outbound_adjustments (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations (id) on delete cascade,
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
-  branch_id uuid not null references branches (id),
+  id bigint generated always as identity (start with 101) primary key,
+  organization_id bigint not null references organizations (id) on delete cascade,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
+  branch_id bigint not null references branches (id),
   serial_number text,
   adjustment_type adjustment_type not null,
   erp_reference text not null,
-  original_invoice_id uuid not null references outbound_invoices (id),
+  original_invoice_id bigint not null references outbound_invoices (id),
   original_serial_number text not null,
   original_invoice_date date not null,
   reason text not null,
@@ -168,7 +166,7 @@ create unique index outbound_adjustments_entity_hash_uidx
   on outbound_adjustments (legal_entity_id, ramis_payload_hash);
 
 create table invoice_usage (
-  organization_id uuid not null references organizations (id) on delete cascade,
+  organization_id bigint not null references organizations (id) on delete cascade,
   period date not null,
   cleared_count integer not null default 0,
   primary key (organization_id, period),
@@ -177,9 +175,9 @@ create table invoice_usage (
 );
 
 create table inbound_invoices (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations (id) on delete cascade,
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
+  id bigint generated always as identity (start with 101) primary key,
+  organization_id bigint not null references organizations (id) on delete cascade,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
   supplier_tin text not null,
   supplier_name text not null,
   supplier_invoice_number text not null,
@@ -201,9 +199,9 @@ create table inbound_invoices (
 );
 
 create table inbound_adjustments (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations (id) on delete cascade,
-  legal_entity_id uuid not null references legal_entities (id) on delete cascade,
+  id bigint generated always as identity (start with 101) primary key,
+  organization_id bigint not null references organizations (id) on delete cascade,
+  legal_entity_id bigint not null references legal_entities (id) on delete cascade,
   supplier_tin text not null,
   supplier_name text not null,
   adjustment_serial_number text not null,
@@ -225,13 +223,13 @@ create table inbound_adjustments (
 );
 
 create table audit_logs (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations (id) on delete cascade,
-  legal_entity_id uuid references legal_entities (id) on delete cascade,
-  outbound_invoice_id uuid references outbound_invoices (id) on delete set null,
-  outbound_adjustment_id uuid references outbound_adjustments (id) on delete set null,
-  inbound_invoice_id uuid references inbound_invoices (id) on delete set null,
-  inbound_adjustment_id uuid references inbound_adjustments (id) on delete set null,
+  id bigint generated always as identity (start with 101) primary key,
+  organization_id bigint not null references organizations (id) on delete cascade,
+  legal_entity_id bigint references legal_entities (id) on delete cascade,
+  outbound_invoice_id bigint references outbound_invoices (id) on delete set null,
+  outbound_adjustment_id bigint references outbound_adjustments (id) on delete set null,
+  inbound_invoice_id bigint references inbound_invoices (id) on delete set null,
+  inbound_adjustment_id bigint references inbound_adjustments (id) on delete set null,
   event text not null,
   detail jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
@@ -239,12 +237,12 @@ create table audit_logs (
 
 create index audit_logs_org_created_idx on audit_logs (organization_id, created_at desc);
 
-create or replace function next_gazette_serial(p_branch_id uuid, p_on date default current_date)
+create or replace function next_gazette_serial(p_branch_id bigint, p_on date default current_date)
 returns text
 language plpgsql
 as $$
 declare
-  v_entity_id uuid;
+  v_entity_id bigint;
   v_code text;
   v_period text;
   v_next integer;
@@ -275,7 +273,7 @@ returns trigger
 language plpgsql
 as $$
 declare
-  v_org uuid;
+  v_org bigint;
 begin
   select organization_id into v_org from legal_entities where id = new.legal_entity_id;
   if v_org is distinct from new.organization_id then
@@ -331,5 +329,5 @@ revoke all on table
   audit_logs
 from anon, authenticated;
 
-revoke all on function next_gazette_serial(uuid, date) from public, anon, authenticated;
-grant execute on function next_gazette_serial(uuid, date) to service_role;
+revoke all on function next_gazette_serial(bigint, date) from public, anon, authenticated;
+grant execute on function next_gazette_serial(bigint, date) to service_role;
