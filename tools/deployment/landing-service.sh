@@ -42,17 +42,20 @@ echo "bundling @invoz/landing-service"
     --platform=node \
     --target=node22 \
     --format=cjs \
+    --external:@prisma/client \
+    --external:.prisma/client \
     --outfile="$BUILD_DIR/landing-service.js"
+  pack_prisma "$BUILD_DIR"
 )
 (
   cd "$BUILD_DIR"
   rm -f landing-service.zip
-  zip -q landing-service.zip landing-service.js
+  zip -qr landing-service.zip landing-service.js node_modules
 )
 
 ENV_FILE="$BUILD_DIR/landing-service-env.json"
 write_lambda_environment "$REPO_ROOT/packages/landing-service/.env" "$ENV_FILE" \
-  SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
+  DATABASE_URL
 
 if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >/dev/null 2>&1; then
   aws lambda update-function-code \

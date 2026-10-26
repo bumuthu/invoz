@@ -1,4 +1,4 @@
-import { supabase } from "./db";
+import { prisma } from "@invoz/database";
 import { emailEnabled, mailConfigured, sendDemoMail } from "./mail";
 import type { LandingRequest, LandingResponse } from "./types";
 
@@ -30,16 +30,11 @@ export async function bookDemo(request: LandingRequest): Promise<LandingResponse
     return { status: 400, body: { error: "Name, work email, phone, company, and ERP are required." } };
   }
 
-  const { error } = await supabase().from("demo_requests").insert({
-    name,
-    email,
-    phone,
-    company,
-    erp,
-    note: note || null,
-  });
-
-  if (error) {
+  try {
+    await prisma.demoRequest.create({
+      data: { name, email, phone, company, erp, note: note || null },
+    });
+  } catch (error) {
     console.error(error);
     return { status: 500, body: { error: "The request could not be saved." } };
   }

@@ -89,6 +89,21 @@ print(f"lambda environment from {path}: {' '.join(sorted(variables))}")
 PY
 }
 
+# Prisma ships a query engine that esbuild cannot inline. Copy the generated client next to the bundle.
+pack_prisma() {
+  local dest="$1"
+  local root="$REPO_ROOT/node_modules"
+  if [[ ! -d "$root/@prisma/client" || ! -d "$root/.prisma/client" ]]; then
+    echo "missing generated Prisma client. Run npm install from the repo root." >&2
+    exit 1
+  fi
+  rm -rf "$dest/node_modules"
+  mkdir -p "$dest/node_modules/@prisma" "$dest/node_modules/.prisma"
+  cp -RL "$root/@prisma/client" "$dest/node_modules/@prisma/client"
+  cp -RL "$root/.prisma/client" "$dest/node_modules/.prisma/client"
+  find "$dest/node_modules/.prisma/client" -name 'libquery_engine-*' ! -name '*rhel-openssl-3.0.x*' -delete
+}
+
 # A new role is not assumable, and its inline policy is not visible, for several seconds.
 retry_iam() {
   local attempt output

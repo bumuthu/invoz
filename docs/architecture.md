@@ -66,13 +66,14 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 5. Lambda reads the message and runs `handler` from `@invoz/invoice-engine`:
    * download and parse the file with the legal entity field mapping
    * check 9-digit TINs, separate invoice and supply dates, and VAT math
-   * allocate `YYMMM_QQQQ_XXXXX` in Supabase
-   * POST the payload to the RAMIS engine at `RAMIS_API_URL`
-6. The worker then writes state back to Supabase and moves the file:
-   * **HTTP 200/201:** status `cleared`, file moves to `processed`, acknowledgment file is written for the ERP
-   * **HTTP 4xx:** status `rejected` with the IRD error, file moves to `rejected`
-   * **HTTP 5xx or timeout:** the worker throws, the message becomes visible again, and SQS retries. The document is not marked rejected.
-7. `portal-app` reads Supabase for the clearance queue, Schedule 02 matching, and the allowance. A signed-in user's membership supplies the organization id. See Portal authentication.
+   * open one Prisma transaction, allocate `YYMMM_QQQQ_XXXXX`, and insert the queued invoice
+   * POST the payload to the RAMIS engine at `RAMIS_API_URL` inside that transaction
+6. The worker then commits or rolls back, and moves the file:
+   * **HTTP 200/201:** the same transaction marks the invoice `cleared` and commits. The file moves to `processed`.
+   * **HTTP 4xx:** the transaction rolls back, so the serial and the queued row are removed. The file moves to `rejected`.
+   * **HTTP 5xx or timeout:** the transaction rolls back and the worker throws. SQS retries. The document is not marked rejected.
+   * **RAMIS cleared, then the commit fails:** the worker emits the `RamisClearedCommitFailed` metric and a critical log. Alarm `invoz-{env}-invoice-engine-ramis-commit-failed` notifies the `invoz-{env}-critical` topic.
+7. `portal-app` reads the portal tables through Prisma for the clearance queue, Schedule 02 matching, and the allowance. Sign-in still uses Supabase Auth. A signed-in user's membership supplies the organization id. See Portal authentication.
 
 `processInvoiceJob` checks that the legal entity belongs to the organization on the job, then posts the invoice to the RAMIS engine at `RAMIS_API_URL`. Staging uses the `invoz-stag-ramis-engine` mock. The worker sends `RAMIS_CLIENT_SECRET`. The mock checks that value with `RAMIS_MOCK_CLIENT_SECRET`, which stays on the RAMIS engine.
 
@@ -126,12 +127,12 @@ Supabase holds operational state and serves the apps. It does not receive ERP fi
 | `migrations/0001_initial.sql` | Organizations, legal entities, branches, memberships, invoices, adjustments, serials, credentials, usage, audit log, and Row-Level Security. |
 | `seeders/` | JSON seed objects exported from `seeders/index.ts`. |
 | `scripts/migrate.ts` | Applies `migrations` and records each file in `schema_migrations`. |
-| `scripts/seed.ts` | Inserts every seed object using `tableColumns` from `@invoz/common`. |
+| `scripts/seed.ts` | Inserts every seed object through Prisma, using `tableColumns` from `@invoz/common`. Auth users are still created with the Supabase Auth admin API. |
 | `er-diagram.md` | Entity diagram for the migration. |
 
 The Lambda handler is `handler` in `@invoz/invoice-engine`. There is no Supabase Edge Function and no database queue.
 
-Row-Level Security is enabled on every table, and `anon` and `authenticated` have no grants. The service role bypasses that. The portal publishable key can sign a user in and cannot read tables.
+Row-Level Security is enabled on every table, and `anon` and `authenticated` have no grants. Portal and worker queries go through Prisma on the direct Postgres connection. Sign-in uses the publishable key, which cannot read tables. The service role is used for Auth admin: creating seed users and listing portal accounts.
 
 Tables:
 
@@ -216,4 +217,4 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run provision` | `tools/deployment/provision.sh` |
 | `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
 
-`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_ROOT_DOMAIN`). `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.
+`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`). `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.

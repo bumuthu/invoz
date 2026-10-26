@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@invoz/common": "*",
+    "@invoz/database": "*",
     "@supabase/supabase-js": "^2.81.1",
     "pg": "^8.16.3"
   },

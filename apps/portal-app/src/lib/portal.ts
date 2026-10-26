@@ -7,17 +7,20 @@ import {
   portalRoleLabel,
   portalRoles,
   type PortalRole,
-  type BranchRow,
-  type FieldMappingRow,
-  type InboundInvoiceRow,
-  type InvoiceUsageRow,
-  type LegalEntityRow,
-  type MembershipRow,
-  type OrganizationRow,
-  type OutboundAdjustmentRow,
-  type OutboundInvoiceRow,
-  type SerialCounterRow,
 } from "@invoz/common";
+import {
+  branchRow,
+  fieldMappingRow,
+  inboundInvoiceRow,
+  invoiceUsageRow,
+  legalEntityRow,
+  membershipRow,
+  organizationRow,
+  outboundAdjustmentRow,
+  outboundInvoiceRow,
+  prisma,
+  serialCounterRow,
+} from "@invoz/database";
 import { supabase } from "@/lib/supabase";
 import { sessionSupabase } from "@/lib/session";
 import type { Invoice, InvoiceStatus, PortalData } from "@/lib/types";
@@ -58,13 +61,6 @@ const fieldOrder = [
   "VAT amount",
   "Ignore",
 ];
-
-function rows<T>(data: T[] | null, error: { message: string } | null, table: string): T[] {
-  if (error) {
-    throw new Error(`${table}: ${error.message}`);
-  }
-  return data ?? [];
-}
 
 function money(value: string | number): string {
   return `LKR ${Number(value).toLocaleString("en-US", {
@@ -124,102 +120,61 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     redirect("/auth/login");
   }
 
-  const db = supabase();
   const slug = await requestedSlug();
-  const ownMembershipResult = await db.from("memberships").select("*").eq("user_id", user.id);
-  const ownMemberships = rows<MembershipRow>(
-    ownMembershipResult.data as MembershipRow[] | null,
-    ownMembershipResult.error,
-    "memberships",
-  );
-  if (ownMemberships.length === 0) {
+  const organizationIds = (
+    await prisma.membership.findMany({ where: { user_id: user.id }, select: { organization_id: true } })
+  ).map((membership) => membership.organization_id);
+  if (organizationIds.length === 0) {
     redirect("/auth/login?error=membership");
   }
 
-  const organizationResult = await db
-    .from("organizations")
-    .select("*")
-    .in(
-      "id",
-      ownMemberships.map((membership) => membership.organization_id),
-    );
-  const organizations = rows<OrganizationRow>(
-    organizationResult.data as OrganizationRow[] | null,
-    organizationResult.error,
-    "organizations",
-  ).filter((item) => (slug ? item.slug === slug : true));
+  const organizations = (
+    await prisma.organization.findMany({ where: { id: { in: organizationIds } } })
+  )
+    .map(organizationRow)
+    .filter((item) => (slug ? item.slug === slug : true));
   const organization = organizations[0];
   if (!organization) {
     redirect("/auth/login?error=membership");
   }
 
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost";
-  const [entityResult, membershipResult, usageResult, accountResult] = await Promise.all([
-    db.from("legal_entities").select("*").eq("organization_id", organization.id),
-    db.from("memberships").select("*").eq("organization_id", organization.id),
-    db.from("invoice_usage").select("*").eq("organization_id", organization.id),
-    db.auth.admin.listUsers({ perPage: 1000 }),
+  const organizationId = BigInt(organization.id);
+  const [entityRecords, membershipRecords, usageRecords, accountResult] = await Promise.all([
+    prisma.legalEntity.findMany({ where: { organization_id: organizationId } }),
+    prisma.membership.findMany({ where: { organization_id: organizationId } }),
+    prisma.invoiceUsage.findMany({ where: { organization_id: organizationId } }),
+    supabase().auth.admin.listUsers({ perPage: 1000 }),
   ]);
 
-  const entities = rows<LegalEntityRow>(
-    entityResult.data as LegalEntityRow[] | null,
-    entityResult.error,
-    "legal_entities",
-  );
+  const entities = entityRecords.map(legalEntityRow);
   const entity = entities[0];
   if (!entity) {
     throw new Error(`${organization.name} has no legal entity`);
   }
-  const memberships = rows<MembershipRow>(
-    membershipResult.data as MembershipRow[] | null,
-    membershipResult.error,
-    "memberships",
-  );
-  const usageRows = rows<InvoiceUsageRow>(
-    usageResult.data as InvoiceUsageRow[] | null,
-    usageResult.error,
-    "invoice_usage",
-  );
+  const memberships = membershipRecords.map(membershipRow);
+  const usageRows = usageRecords.map(invoiceUsageRow);
   if (accountResult.error) {
     throw new Error(`auth users: ${accountResult.error.message}`);
   }
 
-  const [branchResult, counterResult, mappingResult, invoiceResult, adjustmentResult, inboundResult] =
+  const legalEntityId = BigInt(entity.id);
+  const [branchRecords, counterRecords, mappingRecords, invoiceRecords, adjustmentRecords, inboundRecords] =
     await Promise.all([
-      db.from("branches").select("*").eq("legal_entity_id", entity.id),
-      db.from("serial_counters").select("*").eq("legal_entity_id", entity.id),
-      db.from("field_mappings").select("*").eq("legal_entity_id", entity.id),
-      db.from("outbound_invoices").select("*").eq("legal_entity_id", entity.id),
-      db.from("outbound_adjustments").select("*").eq("legal_entity_id", entity.id),
-      db.from("inbound_invoices").select("*").eq("legal_entity_id", entity.id),
+      prisma.branch.findMany({ where: { legal_entity_id: legalEntityId } }),
+      prisma.serialCounter.findMany({ where: { legal_entity_id: legalEntityId } }),
+      prisma.fieldMapping.findMany({ where: { legal_entity_id: legalEntityId } }),
+      prisma.outboundInvoice.findMany({ where: { legal_entity_id: legalEntityId } }),
+      prisma.outboundAdjustment.findMany({ where: { legal_entity_id: legalEntityId } }),
+      prisma.inboundInvoice.findMany({ where: { legal_entity_id: legalEntityId } }),
     ]);
 
-  const branchRows = rows<BranchRow>(branchResult.data as BranchRow[] | null, branchResult.error, "branches");
-  const counters = rows<SerialCounterRow>(
-    counterResult.data as SerialCounterRow[] | null,
-    counterResult.error,
-    "serial_counters",
-  );
-  const mappings = rows<FieldMappingRow>(
-    mappingResult.data as FieldMappingRow[] | null,
-    mappingResult.error,
-    "field_mappings",
-  );
-  const invoiceRows = rows<OutboundInvoiceRow>(
-    invoiceResult.data as OutboundInvoiceRow[] | null,
-    invoiceResult.error,
-    "outbound_invoices",
-  );
-  const adjustmentRows = rows<OutboundAdjustmentRow>(
-    adjustmentResult.data as OutboundAdjustmentRow[] | null,
-    adjustmentResult.error,
-    "outbound_adjustments",
-  );
-  const inboundRows = rows<InboundInvoiceRow>(
-    inboundResult.data as InboundInvoiceRow[] | null,
-    inboundResult.error,
-    "inbound_invoices",
-  );
+  const branchRows = branchRecords.map(branchRow);
+  const counters = counterRecords.map(serialCounterRow);
+  const mappings = mappingRecords.map(fieldMappingRow);
+  const invoiceRows = invoiceRecords.map(outboundInvoiceRow);
+  const adjustmentRows = adjustmentRecords.map(outboundAdjustmentRow);
+  const inboundRows = inboundRecords.map(inboundInvoiceRow);
 
   const accounts = new Map(accountResult.data.users.map((user) => [user.id, user]));
   const branchCode = new Map(branchRows.map((branch) => [branch.id, branch.code]));

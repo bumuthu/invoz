@@ -1,0 +1,333 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PortalRole {
+  owner
+  admin
+  manager
+  staff
+  viewer
+
+  @@map("portal_role")
+}
+
+enum InvoiceClass {
+  standard
+  financial_services
+  zero_rated
+  exempt
+
+  @@map("invoice_class")
+}
+
+enum AdjustmentType {
+  credit_note
+  debit_note
+
+  @@map("adjustment_type")
+}
+
+enum RamisStatus {
+  draft
+  validated
+  queued
+  cleared
+  rejected
+  skipped_non_vat
+
+  @@map("ramis_status")
+}
+
+enum MatchingStatus {
+  unmatched
+  matched
+  discrepancy
+
+  @@map("matching_status")
+}
+
+model Organization {
+  id                BigInt   @id @default(autoincrement())
+  name              String
+  slug              String   @unique(map: "organizations_slug_uidx")
+  monthly_allowance Int      @default(500)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  legalEntities       LegalEntity[]
+  memberships         Membership[]
+  outboundInvoices    OutboundInvoice[]
+  outboundAdjustments OutboundAdjustment[]
+  inboundInvoices     InboundInvoice[]
+  inboundAdjustments  InboundAdjustment[]
+  invoiceUsage        InvoiceUsage[]
+  auditLogs           AuditLog[]
+
+  @@map("organizations")
+}
+
+model LegalEntity {
+  id              BigInt   @id @default(autoincrement())
+  organization_id BigInt
+  name            String
+  tin             String
+  vat_number      String?
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  organization        Organization         @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  branches            Branch[]
+  fieldMappings       FieldMapping[]
+  ramisCredential     RamisCredential?
+  serialCounters      SerialCounter[]
+  outboundInvoices    OutboundInvoice[]
+  outboundAdjustments OutboundAdjustment[]
+  inboundInvoices     InboundInvoice[]
+  inboundAdjustments  InboundAdjustment[]
+  auditLogs           AuditLog[]
+
+  @@unique([organization_id, tin], map: "legal_entities_org_tin_uidx")
+  @@map("legal_entities")
+}
+
+model Branch {
+  id              BigInt   @id @default(autoincrement())
+  legal_entity_id BigInt
+  code            String
+  name            String
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  legalEntity         LegalEntity          @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  serialCounters      SerialCounter[]
+  outboundInvoices    OutboundInvoice[]
+  outboundAdjustments OutboundAdjustment[]
+
+  @@unique([legal_entity_id, code], map: "branches_entity_code_uidx")
+  @@map("branches")
+}
+
+model Membership {
+  id              BigInt     @id @default(autoincrement())
+  user_id         String     @db.Uuid
+  organization_id BigInt
+  role            PortalRole
+  created_at      DateTime   @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, organization_id])
+  @@map("memberships")
+}
+
+model FieldMapping {
+  id              BigInt @id @default(autoincrement())
+  legal_entity_id BigInt
+  source_column   String
+  target_field    String
+
+  legalEntity LegalEntity @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+
+  @@unique([legal_entity_id, source_column])
+  @@map("field_mappings")
+}
+
+model RamisCredential {
+  legal_entity_id       BigInt   @id
+  certificate_secret_arn String
+  updated_at            DateTime @default(now()) @db.Timestamptz(6)
+
+  legalEntity LegalEntity @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+
+  @@map("ramis_credentials")
+}
+
+model SerialCounter {
+  branch_id       BigInt
+  legal_entity_id BigInt
+  period          String
+  last_value      Int
+
+  branch      Branch      @relation(fields: [branch_id], references: [id], onDelete: Cascade)
+  legalEntity LegalEntity @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+
+  @@id([branch_id, period])
+  @@map("serial_counters")
+}
+
+model OutboundInvoice {
+  id                   BigInt       @id @default(autoincrement())
+  organization_id      BigInt
+  legal_entity_id      BigInt
+  branch_id            BigInt
+  serial_number        String?
+  erp_reference        String
+  invoice_type         InvoiceClass @default(standard)
+  invoice_date         DateTime     @db.Date
+  supply_date          DateTime     @db.Date
+  customer_tin         String
+  customer_name        String
+  customer_address     String?
+  place_of_supply      String?
+  currency             String       @default("LKR")
+  exchange_rate        Decimal      @default(1.0000) @db.Decimal(12, 4)
+  amount_exclusive_vat Decimal      @db.Decimal(15, 2)
+  vat_rate             Decimal      @default(18.00) @db.Decimal(5, 2)
+  vat_amount           Decimal      @db.Decimal(15, 2)
+  total_amount         Decimal      @db.Decimal(15, 2)
+  ramis_status         RamisStatus  @default(draft)
+  ramis_clearance_token String?
+  ramis_payload_hash   String
+  error_message        String?
+  created_at           DateTime     @default(now()) @db.Timestamptz(6)
+  cleared_at           DateTime?    @db.Timestamptz(6)
+
+  organization Organization          @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity           @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  branch       Branch                @relation(fields: [branch_id], references: [id])
+  adjustments  OutboundAdjustment[]
+  auditLogs    AuditLog[]
+
+  @@unique([legal_entity_id, erp_reference], map: "outbound_invoices_entity_erp_uidx")
+  @@unique([legal_entity_id, ramis_payload_hash], map: "outbound_invoices_entity_hash_uidx")
+  @@index([legal_entity_id, ramis_status, created_at(sort: Desc)], map: "outbound_invoices_entity_status_idx")
+  @@map("outbound_invoices")
+}
+
+model OutboundAdjustment {
+  id                            BigInt         @id @default(autoincrement())
+  organization_id               BigInt
+  legal_entity_id               BigInt
+  branch_id                     BigInt
+  serial_number                 String?
+  adjustment_type               AdjustmentType
+  erp_reference                 String
+  original_invoice_id           BigInt
+  original_serial_number        String
+  original_invoice_date         DateTime       @db.Date
+  reason                        String
+  adjustment_date               DateTime       @db.Date
+  adjusted_amount_exclusive_vat Decimal        @db.Decimal(15, 2)
+  adjusted_vat_amount           Decimal        @db.Decimal(15, 2)
+  adjusted_total_amount         Decimal        @db.Decimal(15, 2)
+  ramis_status                  RamisStatus    @default(draft)
+  ramis_clearance_token         String?
+  ramis_payload_hash            String
+  error_message                 String?
+  created_at                    DateTime       @default(now()) @db.Timestamptz(6)
+  cleared_at                    DateTime?      @db.Timestamptz(6)
+
+  organization    Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  legalEntity     LegalEntity     @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  branch          Branch          @relation(fields: [branch_id], references: [id])
+  originalInvoice OutboundInvoice @relation(fields: [original_invoice_id], references: [id])
+  auditLogs       AuditLog[]
+
+  @@unique([legal_entity_id, erp_reference], map: "outbound_adjustments_entity_erp_uidx")
+  @@unique([legal_entity_id, ramis_payload_hash], map: "outbound_adjustments_entity_hash_uidx")
+  @@map("outbound_adjustments")
+}
+
+model InvoiceUsage {
+  organization_id BigInt
+  period          DateTime @db.Date
+  cleared_count   Int      @default(0)
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@id([organization_id, period])
+  @@map("invoice_usage")
+}
+
+model InboundInvoice {
+  id                        BigInt         @id @default(autoincrement())
+  organization_id           BigInt
+  legal_entity_id           BigInt
+  supplier_tin              String
+  supplier_name             String
+  supplier_invoice_number   String
+  invoice_date              DateTime       @db.Date
+  amount_exclusive_vat      Decimal        @db.Decimal(15, 2)
+  vat_amount                Decimal        @db.Decimal(15, 2)
+  total_amount              Decimal        @db.Decimal(15, 2)
+  erp_voucher_reference     String?
+  matching_status           MatchingStatus @default(unmatched)
+  is_approved_for_input_vat Boolean        @default(false)
+  approved_at               DateTime?      @db.Timestamptz(6)
+  approved_by               String?        @db.Uuid
+  pulled_at                 DateTime       @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  auditLogs    AuditLog[]
+
+  @@unique([legal_entity_id, supplier_tin, supplier_invoice_number])
+  @@map("inbound_invoices")
+}
+
+model InboundAdjustment {
+  id                            BigInt         @id @default(autoincrement())
+  organization_id               BigInt
+  legal_entity_id               BigInt
+  supplier_tin                  String
+  supplier_name                 String
+  adjustment_serial_number      String
+  adjustment_type               AdjustmentType
+  original_invoice_number       String
+  adjustment_date               DateTime       @db.Date
+  adjusted_amount_exclusive_vat Decimal        @db.Decimal(15, 2)
+  adjusted_vat_amount           Decimal        @db.Decimal(15, 2)
+  matching_status               MatchingStatus @default(unmatched)
+  is_approved                   Boolean        @default(false)
+  approved_at                   DateTime?      @db.Timestamptz(6)
+  approved_by                   String?        @db.Uuid
+  pulled_at                     DateTime       @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  legalEntity  LegalEntity  @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  auditLogs    AuditLog[]
+
+  @@unique([legal_entity_id, supplier_tin, adjustment_serial_number])
+  @@map("inbound_adjustments")
+}
+
+model AuditLog {
+  id                     BigInt   @id @default(autoincrement())
+  organization_id        BigInt
+  legal_entity_id        BigInt?
+  outbound_invoice_id    BigInt?
+  outbound_adjustment_id BigInt?
+  inbound_invoice_id     BigInt?
+  inbound_adjustment_id  BigInt?
+  event                  String
+  detail                 Json     @default("{}")
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+
+  organization       Organization        @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  legalEntity        LegalEntity?        @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  outboundInvoice    OutboundInvoice?    @relation(fields: [outbound_invoice_id], references: [id], onDelete: SetNull)
+  outboundAdjustment OutboundAdjustment? @relation(fields: [outbound_adjustment_id], references: [id], onDelete: SetNull)
+  inboundInvoice     InboundInvoice?     @relation(fields: [inbound_invoice_id], references: [id], onDelete: SetNull)
+  inboundAdjustment  InboundAdjustment?  @relation(fields: [inbound_adjustment_id], references: [id], onDelete: SetNull)
+
+  @@index([organization_id, created_at(sort: Desc)], map: "audit_logs_org_created_idx")
+  @@map("audit_logs")
+}
+
+model DemoRequest {
+  id         BigInt   @id @default(autoincrement())
+  name       String
+  email      String
+  phone      String
+  company    String
+  erp        String
+  note       String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)], map: "demo_requests_created_at_idx")
+  @@map("demo_requests")
+}

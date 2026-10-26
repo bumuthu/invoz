@@ -81,17 +81,20 @@ echo "bundling @invoz/invoice-engine"
     --platform=node \
     --target=node22 \
     --format=cjs \
+    --external:@prisma/client \
+    --external:.prisma/client \
     --outfile="$BUILD_DIR/index.js"
+  pack_prisma "$BUILD_DIR"
 )
 (
   cd "$BUILD_DIR"
   rm -f function.zip
-  zip -q function.zip index.js
+  zip -qr function.zip index.js node_modules
 )
 
 ENV_FILE="$BUILD_DIR/lambda-env.json"
 write_lambda_environment "$REPO_ROOT/packages/invoice-engine/.env" "$ENV_FILE" \
-  SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY RAMIS_API_URL RAMIS_CLIENT_SECRET
+  DATABASE_URL RAMIS_API_URL RAMIS_CLIENT_SECRET
 
 if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >/dev/null 2>&1; then
   aws lambda update-function-code \
@@ -147,3 +150,22 @@ else
     >/dev/null
   echo "updated event source mapping $MAPPING"
 fi
+
+TOPIC_ARN=$(aws sns create-topic --name "$(aws_name critical)" --region "$REGION" --query TopicArn --output text)
+aws cloudwatch put-metric-alarm \
+  --region "$REGION" \
+  --alarm-name "$(aws_name invoice-engine-ramis-commit-failed)" \
+  --alarm-description "RAMIS cleared an invoice but the invoice-engine database commit failed. Reconcile the clearance token in the Lambda log." \
+  --namespace Invoz/InvoiceEngine \
+  --metric-name RamisClearedCommitFailed \
+  --dimensions "Name=Function,Value=${FUNCTION_NAME}" \
+  --statistic Sum \
+  --period 60 \
+  --evaluation-periods 1 \
+  --datapoints-to-alarm 1 \
+  --threshold 1 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions "$TOPIC_ARN" \
+  --ok-actions "$TOPIC_ARN"
+echo "alarm $(aws_name invoice-engine-ramis-commit-failed) notifies $TOPIC_ARN"

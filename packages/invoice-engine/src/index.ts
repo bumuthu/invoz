@@ -1,166 +1,154 @@
 import { createHash } from "node:crypto";
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
-import {
-  isSettledInvoiceKey,
-  isTin,
-  parseInvoiceJob,
-  type BranchRow,
-  type FieldMappingRow,
-  type InvoiceClass,
-  type LegalEntityRow,
-  type OutboundInvoiceRow,
-} from "@invoz/common";
+import { isSettledInvoiceKey, isTin, parseInvoiceJob, type InvoiceClass } from "@invoz/common";
+import { prisma, type Prisma } from "@invoz/database";
 import type { SQSHandler } from "aws-lambda";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { alertRamisClearedCommitFailed } from "./alert";
 import { invoicesFromCsv, type MappedInvoice } from "./invoices";
-import { idempotencyKey, RamisRejection, ramisPayload, submitInvoice } from "./ramis";
+import { idempotencyKey, RamisRejection, ramisPayload, submitInvoice, type Clearance } from "./ramis";
 
 const s3 = new S3Client({});
 
-function supabase() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
-  }
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+type Entity = { id: number; organization_id: number; name: string; tin: string };
 
 export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>): Promise<void> {
   if (job.source !== "s3" || !job.bucket || !job.objectKey) {
     throw new Error("s3 jobs require bucket and objectKey");
   }
-  const client = supabase();
-  const entity = await legalEntity(client, job.legalEntityId, job.organizationId);
+  const entity = await legalEntity(job.legalEntityId, job.organizationId);
   const csv = await readInvoice(job.bucket, job.objectKey);
   if (csv === undefined) return;
 
-  const { data: mappings, error: mappingError } = await client
-    .from("field_mappings")
-    .select("source_column, target_field")
-    .eq("legal_entity_id", entity.id);
-  if (mappingError) throw new Error(mappingError.message);
-
-  const invoices = invoicesFromCsv(csv, (mappings ?? []) as Pick<FieldMappingRow, "source_column" | "target_field">[]);
+  const mappings = await prisma.fieldMapping.findMany({
+    where: { legal_entity_id: BigInt(entity.id) },
+    select: { source_column: true, target_field: true },
+  });
+  const invoices = invoicesFromCsv(csv, mappings);
   let rejected = false;
   for (const invoice of invoices) {
-    const outcome = await submitMappedInvoice(client, entity, job.objectKey, job.branchId, invoice);
+    const outcome = await submitMappedInvoice(entity, job.objectKey, job.branchId, invoice);
     if (outcome === "rejected") rejected = true;
   }
   await moveInvoice(job.bucket, job.objectKey, rejected ? "rejected" : "processed");
 }
 
-async function legalEntity(client: SupabaseClient, legalEntityId: number, organizationId: number) {
-  const { data, error } = await client
-    .from("legal_entities")
-    .select("id, organization_id, name, tin")
-    .eq("id", legalEntityId)
-    .maybeSingle<Pick<LegalEntityRow, "id" | "organization_id" | "name" | "tin">>();
-  if (error) throw new Error(error.message);
-  if (!data || data.organization_id !== organizationId) {
+async function legalEntity(legalEntityId: number, organizationId: number): Promise<Entity> {
+  const row = await prisma.legalEntity.findUnique({
+    where: { id: BigInt(legalEntityId) },
+    select: { id: true, organization_id: true, name: true, tin: true },
+  });
+  if (!row || Number(row.organization_id) !== organizationId) {
     throw new Error("legal entity is not in the organization on this job");
   }
-  if (!isTin(data.tin)) throw new Error("legal entity TIN must be 9 digits");
-  return data;
+  if (!isTin(row.tin)) throw new Error("legal entity TIN must be 9 digits");
+  return { id: Number(row.id), organization_id: Number(row.organization_id), name: row.name, tin: row.tin };
 }
 
 async function submitMappedInvoice(
-  client: SupabaseClient,
-  entity: Pick<LegalEntityRow, "id" | "organization_id" | "name" | "tin">,
+  entity: Entity,
   objectKey: string,
   branchId: number | undefined,
   invoice: MappedInvoice,
 ): Promise<"cleared" | "rejected"> {
   console.log("invoice-engine invoice", JSON.stringify(invoice));
-  let branchQuery = client
-    .from("branches")
-    .select("id, name, code")
-    .eq("legal_entity_id", entity.id);
-  branchQuery = branchId ? branchQuery.eq("id", branchId) : branchQuery.eq("code", invoice.branchCode);
-  const { data: branch, error: branchError } = await branchQuery.maybeSingle<Pick<BranchRow, "id" | "name" | "code">>();
-  if (branchError) throw new Error(branchError.message);
+  const branch = await prisma.branch.findFirst({
+    where: branchId
+      ? { id: BigInt(branchId), legal_entity_id: BigInt(entity.id) }
+      : { legal_entity_id: BigInt(entity.id), code: invoice.branchCode },
+    select: { id: true, name: true, code: true },
+  });
   if (!branch) throw new Error(`branch ${branchId ?? invoice.branchCode} is not in this legal entity`);
   if (branch.code !== invoice.branchCode) {
     throw new Error(`branch code ${invoice.branchCode} does not match branch ${branch.id}`);
   }
 
-  const existing = await existingInvoice(client, entity.id, invoice.erpReference);
-  if (existing?.ramis_status === "cleared") return "cleared";
-  if (existing?.ramis_status === "rejected") return "rejected";
-
-  const serialNumber = existing?.serial_number ?? (await nextSerial(client, branch.id, invoice.invoiceDate));
-  const payload = ramisPayload(invoice, serialNumber, entity, branch.name);
-  const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-  const invoiceId =
-    existing?.id ?? (await insertQueued(client, entity, branch.id, branch.name, invoice, serialNumber, hash));
-
+  let clearance: Clearance | undefined;
+  let serialNumber = "";
   try {
-    const clearance = await submitInvoice(payload, idempotencyKey(objectKey, invoice.erpReference));
-    const { error } = await client
-      .from("outbound_invoices")
-      .update({
-        ramis_status: "cleared",
-        ramis_clearance_token: clearance.token,
-        ramis_payload_hash: clearance.hash,
-        cleared_at: clearance.clearedAt,
-        error_message: null,
-      })
-      .eq("id", invoiceId);
-    if (error) throw new Error(error.message);
-    return "cleared";
+    return await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`select set_config('statement_timeout', '55s', true)`;
+        await tx.$executeRaw`select set_config('idle_in_transaction_session_timeout', '55s', true)`;
+
+        const locked = await tx.$queryRaw<{ id: bigint; serial_number: string | null; ramis_status: string }[]>`
+          select id, serial_number, ramis_status
+          from outbound_invoices
+          where legal_entity_id = ${BigInt(entity.id)} and erp_reference = ${invoice.erpReference}
+          for update
+        `;
+        const existing = locked[0];
+        if (existing?.ramis_status === "cleared" || existing?.ramis_status === "rejected") {
+          return existing.ramis_status === "cleared" ? "cleared" : "rejected";
+        }
+
+        serialNumber = existing?.serial_number ?? (await nextSerial(tx, branch.id, invoice.invoiceDate));
+        const payload = ramisPayload(invoice, serialNumber, entity, branch.name);
+        const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+        const invoiceId = existing?.id ?? (await insertQueued(tx, entity, branch.id, branch.name, invoice, serialNumber, hash));
+
+        clearance = await submitInvoice(payload, idempotencyKey(objectKey, invoice.erpReference));
+        await tx.outboundInvoice.update({
+          where: { id: invoiceId },
+          data: {
+            ramis_status: "cleared",
+            ramis_clearance_token: clearance.token,
+            ramis_payload_hash: clearance.hash,
+            cleared_at: new Date(clearance.clearedAt),
+            error_message: null,
+          },
+        });
+        return "cleared";
+      },
+      { timeout: 55_000, maxWait: 10_000 },
+    );
   } catch (error) {
-    if (!(error instanceof RamisRejection)) throw error;
-    const { error: updateError } = await client
-      .from("outbound_invoices")
-      .update({ ramis_status: "rejected", error_message: error.message })
-      .eq("id", invoiceId);
-    if (updateError) throw new Error(updateError.message);
-    return "rejected";
+    if (error instanceof RamisRejection) return "rejected";
+    if (clearance) {
+      alertRamisClearedCommitFailed({
+        organizationId: entity.organization_id,
+        legalEntityId: entity.id,
+        branchId: Number(branch.id),
+        erpReference: invoice.erpReference,
+        serialNumber,
+        clearanceToken: clearance.token,
+        clearedAt: clearance.clearedAt,
+        error,
+      });
+    }
+    throw error;
   }
 }
 
-async function existingInvoice(client: SupabaseClient, legalEntityId: number, erpReference: string) {
-  const { data, error } = await client
-    .from("outbound_invoices")
-    .select("id, serial_number, ramis_status")
-    .eq("legal_entity_id", legalEntityId)
-    .eq("erp_reference", erpReference)
-    .maybeSingle<Pick<OutboundInvoiceRow, "id" | "serial_number" | "ramis_status">>();
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-async function nextSerial(client: SupabaseClient, branchId: number, invoiceDate: string): Promise<string> {
-  const { data, error } = await client.rpc("next_gazette_serial", { p_branch_id: branchId, p_on: invoiceDate });
-  if (error) throw new Error(error.message);
-  if (typeof data !== "string" || data === "") throw new Error("next serial was not returned");
-  return data;
+async function nextSerial(tx: Prisma.TransactionClient, branchId: bigint, invoiceDate: string): Promise<string> {
+  const result = await tx.$queryRaw<{ serial: string }[]>`
+    select next_gazette_serial(${branchId}::bigint, ${invoiceDate}::date) as serial
+  `;
+  const serial = result[0]?.serial;
+  if (!serial) throw new Error("next serial was not returned");
+  return serial;
 }
 
 async function insertQueued(
-  client: SupabaseClient,
-  entity: Pick<LegalEntityRow, "id" | "organization_id">,
-  branchId: number,
+  tx: Prisma.TransactionClient,
+  entity: Entity,
+  branchId: bigint,
   placeOfSupply: string,
   invoice: MappedInvoice,
   serialNumber: string,
   hash: string,
-): Promise<number> {
+): Promise<bigint> {
   const exempt = Number(invoice.vatAmount) === 0;
   const invoiceType: InvoiceClass = exempt ? "exempt" : "standard";
-  const { data, error } = await client
-    .from("outbound_invoices")
-    .insert({
-      organization_id: entity.organization_id,
-      legal_entity_id: entity.id,
+  const created = await tx.outboundInvoice.create({
+    data: {
+      organization_id: BigInt(entity.organization_id),
+      legal_entity_id: BigInt(entity.id),
       branch_id: branchId,
       serial_number: serialNumber,
       erp_reference: invoice.erpReference,
       invoice_type: invoiceType,
-      invoice_date: invoice.invoiceDate,
-      supply_date: invoice.supplyDate,
+      invoice_date: new Date(invoice.invoiceDate),
+      supply_date: new Date(invoice.supplyDate),
       customer_tin: invoice.buyerTin,
       customer_name: invoice.buyerName,
       place_of_supply: placeOfSupply,
@@ -172,11 +160,10 @@ async function insertQueued(
       total_amount: invoice.totalAmount,
       ramis_status: "queued",
       ramis_payload_hash: hash,
-    })
-    .select("id")
-    .single<{ id: number }>();
-  if (error) throw new Error(error.message);
-  return data.id;
+    },
+    select: { id: true },
+  });
+  return created.id;
 }
 
 async function readInvoice(bucket: string, key: string): Promise<string | undefined> {

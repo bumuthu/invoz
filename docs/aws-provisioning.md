@@ -230,7 +230,7 @@ aws sqs get-queue-url --queue-name invoz-${APP_ENV}-invoicing-pipeline-dlq.fifo 
 
 ## 4. Lambda
 
-Publishes `invoz-${APP_ENV}-invoice-engine` (Node.js 20, 512 MB, 60 second timeout) and maps `invoz-${APP_ENV}-invoicing-pipeline.fifo` to it with batch size 5. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` must already be exported. The queue from step 3 must exist.
+Publishes `invoz-${APP_ENV}-invoice-engine` (Node.js 22, 512 MB, 60 second timeout) and maps `invoz-${APP_ENV}-invoicing-pipeline.fifo` to it with batch size 5. `packages/invoice-engine/.env` must contain `DATABASE_URL`. The publish copies the generated Prisma client into the zip. The queue from step 3 must exist.
 
 ```bash
 npm run provision:lambda -w @invoz/deployment
@@ -252,7 +252,7 @@ aws lambda list-event-source-mappings \
 
 The role can read and write the shared invoice bucket, consume the work queue, and read Secrets Manager secrets named `invoz-${APP_ENV}/*`. This step does not create a secret.
 
-The worker environment is `packages/invoice-engine/.env`. `RAMIS_API_URL` in that file is the base URL printed by step 6. Set it, then run `npm run provision:lambda` again.
+The worker environment is `packages/invoice-engine/.env`. It needs `DATABASE_URL` for the clearance transaction, and `RAMIS_API_URL` is the base URL printed by step 6. Set both, then run `npm run provision:lambda` again. That publish also creates alarm `invoz-${APP_ENV}-invoice-engine-ramis-commit-failed` on metric `Invoz/InvoiceEngine` `RamisClearedCommitFailed`, and sends it to SNS topic `invoz-${APP_ENV}-critical`.
 
 ## 5. EventBridge
 
@@ -336,7 +336,7 @@ Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with pa
 | `invoz-{env}-ramis-engine` | `invoz-{env}-ramis-engine` | 30 s | 512 MB | `invoz-{env}-invoice-engine`, through `RAMIS_API_URL` |
 | `invoz-{env}-landing-service` | `invoz-{env}-landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
 
-`npm run provision:ramis` publishes `tools/ramis-engine/.env`. The function sets `search_path` to `ramis_engine`. `npm run provision:landing` publishes `packages/landing-service/.env`. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`.
+`npm run provision:ramis` publishes `tools/ramis-engine/.env`. The function sets `search_path` to `ramis_engine`. `npm run provision:landing` publishes `packages/landing-service/.env`, which needs `DATABASE_URL`, and copies the generated Prisma client into the zip. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`.
 
 ```bash
 npm run provision:ramis

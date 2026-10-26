@@ -7,28 +7,49 @@ import {
   tableColumns,
   type TableName,
 } from "@invoz/common";
+import { prisma, type Prisma } from "@invoz/database";
 import { createClient } from "@supabase/supabase-js";
-import { Client } from "pg";
 import { seeds, seedTables, type SeedDocument, type SeedRow } from "../seeders";
 
 const refs = new Map<string, string>();
 
+const bigintColumns = new Set([
+  "id",
+  "organization_id",
+  "legal_entity_id",
+  "branch_id",
+  "original_invoice_id",
+  "outbound_invoice_id",
+  "outbound_adjustment_id",
+  "inbound_invoice_id",
+  "inbound_adjustment_id",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function bind(value: unknown): unknown {
-  if (isRecord(value) || Array.isArray(value)) {
-    return JSON.stringify(value);
-  }
-  return value;
 }
 
 function resolve(column: string, value: unknown): unknown {
   if ((column === "user_id" || column.endsWith("_id")) && typeof value === "string" && refs.has(value)) {
     return refs.get(value);
   }
-  return bind(value);
+  if (isRecord(value) || Array.isArray(value)) {
+    return value;
+  }
+  return value;
+}
+
+function cell(column: string, value: unknown): unknown {
+  const resolved = resolve(column, value);
+  if (
+    bigintColumns.has(column) &&
+    resolved !== null &&
+    resolved !== undefined &&
+    (typeof resolved === "number" || typeof resolved === "string")
+  ) {
+    return BigInt(resolved);
+  }
+  return resolved;
 }
 
 function checkRow(table: TableName, row: Record<string, unknown>): void {
@@ -55,12 +76,42 @@ function checkRow(table: TableName, row: Record<string, unknown>): void {
   }
 }
 
-async function insertRow(database: Client, table: TableName, row: SeedRow<TableName>): Promise<void> {
+async function createRow(tx: Prisma.TransactionClient, table: TableName, data: Record<string, unknown>) {
+  switch (table) {
+    case "organizations":
+      return tx.organization.create({ data: data as Prisma.OrganizationUncheckedCreateInput });
+    case "legal_entities":
+      return tx.legalEntity.create({ data: data as Prisma.LegalEntityUncheckedCreateInput });
+    case "branches":
+      return tx.branch.create({ data: data as Prisma.BranchUncheckedCreateInput });
+    case "memberships":
+      return tx.membership.create({ data: data as Prisma.MembershipUncheckedCreateInput });
+    case "field_mappings":
+      return tx.fieldMapping.create({ data: data as Prisma.FieldMappingUncheckedCreateInput });
+    case "ramis_credentials":
+      return tx.ramisCredential.create({ data: data as Prisma.RamisCredentialUncheckedCreateInput });
+    case "serial_counters":
+      return tx.serialCounter.create({ data: data as Prisma.SerialCounterUncheckedCreateInput });
+    case "outbound_invoices":
+      return tx.outboundInvoice.create({ data: data as Prisma.OutboundInvoiceUncheckedCreateInput });
+    case "outbound_adjustments":
+      return tx.outboundAdjustment.create({ data: data as Prisma.OutboundAdjustmentUncheckedCreateInput });
+    case "invoice_usage":
+      return tx.invoiceUsage.create({ data: data as Prisma.InvoiceUsageUncheckedCreateInput });
+    case "inbound_invoices":
+      return tx.inboundInvoice.create({ data: data as Prisma.InboundInvoiceUncheckedCreateInput });
+    case "inbound_adjustments":
+      return tx.inboundAdjustment.create({ data: data as Prisma.InboundAdjustmentUncheckedCreateInput });
+    case "audit_logs":
+      return tx.auditLog.create({ data: data as Prisma.AuditLogUncheckedCreateInput });
+  }
+}
+
+async function insertRow(tx: Prisma.TransactionClient, table: TableName, row: SeedRow<TableName>): Promise<void> {
   const source = row as Record<string, unknown>;
   const ref = typeof source.ref === "string" ? source.ref : undefined;
   const allowed = new Set<string>(tableColumns[table]);
-  const columns: string[] = [];
-  const values: unknown[] = [];
+  const data: Record<string, unknown> = {};
 
   checkRow(table, source);
 
@@ -71,30 +122,25 @@ async function insertRow(database: Client, table: TableName, row: SeedRow<TableN
     if (!allowed.has(key)) {
       throw new Error(`${table}.${key} is not a column`);
     }
-    columns.push(key);
-    values.push(resolve(key, value));
+    data[key] = cell(key, value);
   }
 
-  if (columns.length === 0) {
+  if (Object.keys(data).length === 0) {
     throw new Error(`${table} row has no columns`);
   }
-
-  const placeholders = values.map((_, index) => `$${index + 1}`).join(", ");
-  const returnsId = allowed.has("id");
-  if (ref && !returnsId) {
+  if (ref && !allowed.has("id")) {
     throw new Error(`${table} cannot use ref because it has no id column`);
   }
 
-  const inserted = await database.query<{ id: string }>(
-    `insert into ${table} (${columns.join(", ")}) values (${placeholders})${returnsId ? " returning id" : ""}`,
-    values,
-  );
-
+  const created = await createRow(tx, table, data);
   if (ref) {
     if (refs.has(ref)) {
       throw new Error(`duplicate seed ref ${ref}`);
     }
-    refs.set(ref, String(inserted.rows[0].id));
+    if (!("id" in created)) {
+      throw new Error(`${table} cannot use ref because it has no id column`);
+    }
+    refs.set(ref, String(created.id));
   }
 
   console.log(`seeded ${table}${ref ? ` ${ref}` : ""}`);
@@ -122,15 +168,14 @@ async function authUserId(email: string, password: string, userName?: string): P
   return created.data.user.id;
 }
 
-async function seedAuthUsers(database: Client, documents: SeedDocument[]): Promise<void> {
+async function seedAuthUsers(documents: SeedDocument[]): Promise<void> {
   for (const document of documents) {
     for (const user of document.auth_users ?? []) {
       const email = user.email.toLowerCase();
-      const existing = await database.query<{ id: string }>(
-        "select id from auth.users where lower(email) = $1",
-        [email],
-      );
-      const userId = existing.rows[0]?.id ?? (await authUserId(email, user.password, user.name));
+      const existing = await prisma.$queryRaw<{ id: string }[]>`
+        select id from auth.users where lower(email) = ${email}
+      `;
+      const userId = existing[0]?.id ?? (await authUserId(email, user.password, user.name));
       if (user.ref) {
         if (refs.has(user.ref)) {
           throw new Error(`duplicate seed ref ${user.ref}`);
@@ -153,8 +198,7 @@ function assertKnownKeys(document: SeedDocument): void {
 }
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
+  if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required. Run npm run migrate before this script.");
   }
   if (seeds.length === 0) {
@@ -165,35 +209,24 @@ async function main() {
     assertKnownKeys(document);
   }
 
-  const database = new Client({ connectionString: databaseUrl });
-  await database.connect();
-
-  let started = false;
-  try {
-    await seedAuthUsers(database, seeds);
-    await database.query("begin");
-    started = true;
-
-    for (const table of seedTables) {
-      for (const document of seeds) {
-        for (const row of document[table] ?? []) {
-          await insertRow(database, table, row);
+  await seedAuthUsers(seeds);
+  await prisma.$transaction(
+    async (tx) => {
+      for (const table of seedTables) {
+        for (const document of seeds) {
+          for (const row of document[table] ?? []) {
+            await insertRow(tx, table, row);
+          }
         }
       }
-    }
-
-    await database.query("commit");
-  } catch (error) {
-    if (started) {
-      await database.query("rollback");
-    }
-    throw error;
-  } finally {
-    await database.end();
-  }
+    },
+    { timeout: 60_000, maxWait: 10_000 },
+  );
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

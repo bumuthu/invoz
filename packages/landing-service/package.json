@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0",
+    "@invoz/database": "*",
     "nodemailer": "^10.1.7"
   },
   "devDependencies": {
