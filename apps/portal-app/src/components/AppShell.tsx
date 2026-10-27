@@ -5,6 +5,7 @@ import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
@@ -24,6 +25,9 @@ import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
+import Divider from "@mui/material/Divider";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FilterBar from "@/components/FilterBar";
@@ -128,7 +132,7 @@ function SidebarContent({
                       py: 0.9,
                       pl: 1.25,
                       borderLeft: "3px solid",
-                      borderColor: active ? "primary.main" : "transparent",
+                      borderColor: active ? "secondary.main" : "transparent",
                       color: active ? "text.primary" : "text.secondary",
                       "&:hover": {
                         bgcolor: "action.hover",
@@ -160,35 +164,145 @@ function SidebarContent({
         <Typography variant="caption" color="text.secondary" display="block">
           {organization.host}
         </Typography>
-        <Button
-          size="small"
-          onClick={async () => {
-            await browserSupabase().auth.signOut();
-            router.push("/auth/login");
-            router.refresh();
-          }}
-          sx={{ mt: 1, px: 0, minWidth: 0 }}
-        >
-          Sign out
-        </Button>
       </Box>
     </Stack>
   );
 }
 
-function AccountChip({ currentUser }: { currentUser: PortalData["currentUser"] }) {
+function AccountDetail({ label, value }: { label: string; value: string }) {
   return (
-    <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
-      <Initials name={currentUser.name} size={36} />
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 600, lineHeight: 1.2 }}>
-          {currentUser.name}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.3 }}>
-          {currentUser.role}
-        </Typography>
-      </Box>
-    </Stack>
+    <Box>
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "text.secondary",
+        }}
+      >
+        {label}
+      </Typography>
+      <Typography sx={{ mt: 0.25, fontSize: 14, fontWeight: 600, lineHeight: 1.4 }}>{value}</Typography>
+    </Box>
+  );
+}
+
+function AccountMenu({
+  currentUser,
+  organizationName,
+  compact = false,
+}: {
+  currentUser: PortalData["currentUser"];
+  organizationName: string;
+  compact?: boolean;
+}) {
+  const router = useRouter();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+
+  async function signOut() {
+    setAnchor(null);
+    await browserSupabase().auth.signOut();
+    router.push("/auth/login");
+    router.refresh();
+  }
+
+  return (
+    <>
+      <Button
+        color="inherit"
+        onClick={(event) => setAnchor(event.currentTarget)}
+        aria-haspopup="menu"
+        aria-expanded={Boolean(anchor)}
+        aria-label={`Account menu for ${currentUser.name}`}
+        sx={{
+          px: compact ? 0.5 : 1.25,
+          py: 0.5,
+          minWidth: 0,
+          borderRadius: 999,
+          bgcolor: anchor ? "action.hover" : "transparent",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
+      >
+        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
+          <Initials name={currentUser.name} size={compact ? 32 : 36} />
+          {compact ? null : (
+            <Box sx={{ minWidth: 0, textAlign: "left" }}>
+              <Typography sx={{ fontSize: 14, fontWeight: 600, lineHeight: 1.2 }}>
+                {currentUser.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.3 }}>
+                {currentUser.role}
+              </Typography>
+            </Box>
+          )}
+        </Stack>
+      </Button>
+      <Menu
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{
+          paper: { sx: { mt: 1, width: 300, overflow: "hidden" } },
+          list: { sx: { py: 0 } },
+        }}
+      >
+        <Box
+          component="li"
+          sx={{
+            px: 2.25,
+            pt: 2.25,
+            pb: 2,
+            bgcolor: "background.default",
+            listStyle: "none",
+          }}
+        >
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+            <Initials name={currentUser.name} size={48} />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.25 }}>
+                {currentUser.name}
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.25, overflow: "hidden", textOverflow: "ellipsis" }}
+              >
+                {currentUser.email}
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+        <Box component="li" sx={{ px: 2.25, py: 1.75, listStyle: "none" }}>
+          <Stack spacing={1.5}>
+            <AccountDetail label="Role" value={currentUser.role} />
+            <AccountDetail label="Organization" value={organizationName} />
+          </Stack>
+        </Box>
+        <Divider component="li" />
+        <MenuItem
+          onClick={signOut}
+          sx={{
+            px: 2.25,
+            py: 1.35,
+            borderRadius: 0,
+            fontSize: 14,
+            fontWeight: 600,
+            "&:hover": {
+              bgcolor: "error.light",
+              color: "error.main",
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>
+            <LogoutOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          Sign out
+        </MenuItem>
+      </Menu>
+    </>
   );
 }
 
@@ -238,9 +352,10 @@ export default function AppShell({
           <IconButton edge="start" onClick={() => setOpen(true)} aria-label="Open navigation">
             <MenuIcon />
           </IconButton>
-          <Box sx={{ ml: 1 }}>
+          <Box sx={{ ml: 1, flex: 1 }}>
             <Logo height={28} />
           </Box>
+          <AccountMenu currentUser={currentUser} organizationName={organization.name} compact />
         </Toolbar>
       </AppBar>
       <Drawer
@@ -294,7 +409,7 @@ export default function AppShell({
             mb: 2,
           }}
         >
-          <AccountChip currentUser={currentUser} />
+          <AccountMenu currentUser={currentUser} organizationName={organization.name} />
         </Stack>
         {showsFilters(pathname) ? (
           <Box sx={{ position: "sticky", top: 12, zIndex: 2 }}>

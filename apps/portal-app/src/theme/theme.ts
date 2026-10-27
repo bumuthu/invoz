@@ -13,7 +13,9 @@ const theme = createTheme({
       contrastText: tokens.contrast,
     },
     secondary: {
-      main: tokens.primaryDark,
+      main: tokens.accent,
+      dark: tokens.accentDark,
+      contrastText: tokens.contrast,
     },
     success: {
       main: tokens.success,

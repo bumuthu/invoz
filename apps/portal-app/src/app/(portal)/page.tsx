@@ -63,7 +63,7 @@ export default async function OverviewPage() {
               <Typography variant="body2" color="text.secondary">
                 {card.label}
               </Typography>
-              <Typography sx={{ mt: 0.75, fontSize: 28, fontWeight: 700, letterSpacing: "-0.04em", color: index === 0 ? "primary.main" : "text.primary" }}>
+              <Typography sx={{ mt: 0.75, fontSize: 28, fontWeight: 700, letterSpacing: "-0.04em" }}>
                 {card.value}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
