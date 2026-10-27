@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { headers } from "next/headers";
 import {
   formatGazetteSerial,
   portalRoleLabel,
@@ -65,7 +66,8 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
   const filters = access.filters;
   const organizationId = BigInt(access.organization.id);
   const flags = permissions(access.role);
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "localhost";
+  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN;
+  const requestHost = (await headers()).get("host")?.split(":")[0] ?? "";
 
   const [entityRecords, membershipRecords, usageRecords, accountResult] = await Promise.all([
     prisma.legalEntity.findMany({ where: { organization_id: organizationId }, orderBy: { name: "asc" } }),
@@ -277,7 +279,7 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
       id: String(access.organization.id),
       name: access.organization.name,
       slug: access.organization.slug,
-      host: `${access.organization.slug}.${root}`,
+      host: root ? `${access.organization.slug}.${root}` : requestHost,
       monthlyAllowance: access.organization.monthly_allowance,
     },
     organizations: access.organizations.map((organization) => ({
