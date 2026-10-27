@@ -148,9 +148,9 @@ Tables:
 
 | Piece | Role |
 | --- | --- |
-| `src/middleware.ts` | Calls `auth.getUser()`. No session redirects to `/auth/login`. A session on that page, without `?error`, redirects to `/`. |
+| `src/middleware.ts` | Calls `auth.getUser()`. No session redirects to `/auth/login`. A session on an organization host, on that page and without `?error`, redirects to `/`. |
 | `/login` | Redirects to `/auth/login`. |
-| `src/app/auth/login` | Email and password form. `signInWithPassword` uses the publishable key in the browser. |
+| `src/app/auth/login` | Organization slug, then email and password. `signInWithPassword` uses the publishable key in the browser. |
 | `src/lib/session.ts` | Reads the same cookie session in Server Components. |
 | `src/lib/supabase.ts` | Service-role client. Server only. Used for every table read. |
 | `(portal)/layout.tsx` | Calls `loadPortal()` before any portal page renders. |
@@ -159,7 +159,7 @@ Tables:
 
 1. No session redirects to `/auth/login`.
 2. Memberships are loaded for that `user_id`. None redirects to `/auth/login?error=membership`.
-3. The organization is one of those memberships. On `{slug}.{NEXT_PUBLIC_ROOT_DOMAIN}` the slug must match the host. `localhost` has no slug, so the user's membership organization is used.
+3. The organization is one of those memberships. On `{slug}.{NEXT_PUBLIC_ROOT_DOMAIN}` the slug must match the host. `app.{root}` (`app.invoz.lk`, or `app.stag.invoz.lk` when the root is `stag.invoz.lk`) and `localhost` have no organization yet, so they show that login form. `PORTAL_REQUIRE_ORG_HOST=true` sends a successful login to `{slug}.{root}` and sends every other default host, including localhost, to `https://app.{root}/auth/login`. `false` keeps the session on the root URL for testing.
 4. A host the user does not belong to redirects to `/auth/login?error=membership`.
 5. Legal entity, branches, invoices, adjustments, inbound invoices, field mappings, serials, usage, and the member list are queried with that organization id and its legal entity id.
 
@@ -217,4 +217,4 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run provision` | `tools/deployment/provision.sh` |
 | `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
 
-`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`). `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.
+`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`, `PORTAL_REQUIRE_ORG_HOST`). `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.

@@ -29,10 +29,12 @@ import Divider from "@mui/material/Divider";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { useState } from "react";
+import PageSkeleton from "@/components/PageSkeleton";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FilterBar from "@/components/FilterBar";
 import Initials from "@/components/Initials";
 import Logo from "@/components/Logo";
+import { clearOrganization } from "@/lib/portal-entry";
 import { browserSupabase } from "@/lib/supabase-browser";
 import type { PortalData } from "@/lib/types";
 
@@ -75,15 +77,20 @@ function showsFilters(pathname: string) {
 function SidebarContent({
   organization,
   canAudit,
+  pendingHref,
+  onSelect,
   onNavigate,
 }: {
   organization: PortalData["organization"];
   canAudit: boolean;
+  pendingHref: string | null;
+  onSelect: (href: string) => void;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const search = useSearchParams().toString();
+  const current = pendingHref ?? pathname;
 
   return (
     <Stack sx={{ height: "100%" }}>
@@ -116,13 +123,14 @@ function SidebarContent({
               {section.items.filter((item) => !("audit" in item) || canAudit).map((item) => {
                 const active =
                   item.href === "/"
-                    ? pathname === "/"
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    ? current === "/"
+                    : current === item.href || current.startsWith(`${item.href}/`);
                 return (
                   <ListItemButton
                     key={item.href}
                     selected={active}
                     onClick={() => {
+                      if (pathname !== item.href) onSelect(item.href);
                       router.push(search ? `${item.href}?${search}` : item.href);
                       onNavigate?.();
                     }}
@@ -202,6 +210,7 @@ function AccountMenu({
 
   async function signOut() {
     setAnchor(null);
+    await clearOrganization();
     await browserSupabase().auth.signOut();
     router.push("/auth/login");
     router.refresh();
@@ -330,9 +339,19 @@ export default function AppShell({
   periods: PortalData["periods"];
 }) {
   const [open, setOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const pathname = usePathname();
+  const arrived = pendingHref !== null && pathname === pendingHref;
+  if (arrived) setPendingHref(null);
+  const route = arrived ? pathname : (pendingHref ?? pathname);
   const drawer = (
-    <SidebarContent organization={organization} canAudit={canAudit} onNavigate={() => setOpen(false)} />
+    <SidebarContent
+      organization={organization}
+      canAudit={canAudit}
+      pendingHref={pendingHref}
+      onSelect={setPendingHref}
+      onNavigate={() => setOpen(false)}
+    />
   );
 
   return (
@@ -401,30 +420,41 @@ export default function AppShell({
         }}
       >
         <Stack
-          direction="row"
+          direction={{ xs: "column", md: "row" }}
+          spacing={1.5}
           className="no-print"
           sx={{
-            display: { xs: "none", md: "flex" },
-            justifyContent: "flex-end",
-            mb: 2,
+            alignItems: { md: "center" },
+            mb: 2.5,
+            position: showsFilters(route) ? "sticky" : "static",
+            top: 12,
+            zIndex: 2,
+            bgcolor: "background.default",
           }}
         >
-          <AccountMenu currentUser={currentUser} organizationName={organization.name} />
+          {showsFilters(route) ? (
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <FilterBar
+                filters={filters}
+                entities={entities}
+                branches={branches}
+                periods={periods}
+                organizations={organizations}
+                organizationId={organization.id}
+                showOrganization={!hostPinned && organizations.length > 1}
+                account={<AccountMenu currentUser={currentUser} organizationName={organization.name} compact />}
+              />
+            </Box>
+          ) : (
+            <Box sx={{ flex: 1 }} />
+          )}
+          {showsFilters(route) ? null : (
+            <Box sx={{ display: { xs: "none", md: "block" }, flexShrink: 0 }}>
+              <AccountMenu currentUser={currentUser} organizationName={organization.name} compact />
+            </Box>
+          )}
         </Stack>
-        {showsFilters(pathname) ? (
-          <Box sx={{ position: "sticky", top: 12, zIndex: 2 }}>
-            <FilterBar
-              filters={filters}
-              entities={entities}
-              branches={branches}
-              periods={periods}
-              organizations={organizations}
-              organizationId={organization.id}
-              showOrganization={!hostPinned && organizations.length > 1}
-            />
-          </Box>
-        ) : null}
-        {children}
+        {arrived || !pendingHref ? children : <PageSkeleton route={pendingHref} />}
       </Box>
     </Box>
   );

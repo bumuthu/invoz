@@ -1,13 +1,52 @@
 "use client";
 
+import Divider from "@mui/material/Divider";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import { usePathname, useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { periodLabel } from "@/lib/filters";
 import type { BranchView, EntityOption, OrganizationOption, PortalFilters } from "@/lib/types";
 
-const fieldSx = { minWidth: { md: 0 }, flex: { md: 1 } };
+const fieldSx = {
+  minWidth: { md: 0 },
+  flex: { md: 1 },
+  "& .MuiInputLabel-root": {
+    fontSize: 13,
+    fontWeight: 600,
+    letterSpacing: "0.01em",
+  },
+  "& .MuiInputBase-root": {
+    fontSize: 13,
+    fontWeight: 600,
+    letterSpacing: "-0.011em",
+    color: "text.primary",
+  },
+  "& .MuiSelect-select": {
+    fontWeight: 600,
+    py: "7.5px",
+  },
+};
+
+const selectSlotProps = {
+  select: {
+    MenuProps: {
+      slotProps: {
+        list: {
+          sx: {
+            py: 0.5,
+            "& .MuiMenuItem-root": {
+              fontSize: 13,
+              fontWeight: 600,
+              minHeight: 34,
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
 export default function FilterBar({
   filters,
@@ -17,6 +56,7 @@ export default function FilterBar({
   organizations,
   organizationId,
   showOrganization,
+  account,
 }: {
   filters: PortalFilters;
   entities: EntityOption[];
@@ -25,6 +65,7 @@ export default function FilterBar({
   organizations: OrganizationOption[];
   organizationId: string;
   showOrganization: boolean;
+  account?: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -52,18 +93,22 @@ export default function FilterBar({
 
   return (
     <Stack
-      direction={{ xs: "column", lg: "row" }}
-      spacing={1.25}
+      direction={{ xs: "column", md: "row" }}
       className="no-print"
       sx={{
-        p: 1.5,
-        mb: 2.5,
+        alignItems: "stretch",
         border: 1,
         borderColor: "divider",
         borderRadius: 3,
         bgcolor: "background.paper",
+        overflow: "hidden",
       }}
     >
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={1.5}
+        sx={{ flex: 1, minWidth: 0, px: 2.25, py: 2 }}
+      >
       {showOrganization ? (
         <TextField
           select
@@ -72,6 +117,7 @@ export default function FilterBar({
           value={organizationId}
           onChange={(event) => push({ org: event.target.value, entityId: "all", branch: "all" })}
           sx={fieldSx}
+          slotProps={selectSlotProps}
         >
           {organizations.map((organization) => (
             <MenuItem key={organization.id} value={organization.id}>
@@ -87,6 +133,7 @@ export default function FilterBar({
         value={entities.some((entity) => entity.id === filters.entityId) ? filters.entityId : "all"}
         onChange={(event) => push({ entityId: event.target.value, branch: "all" })}
         sx={fieldSx}
+        slotProps={selectSlotProps}
       >
         <MenuItem value="all">All entities</MenuItem>
         {entities.map((entity) => (
@@ -102,6 +149,7 @@ export default function FilterBar({
         value={branchValue}
         onChange={(event) => push({ branch: event.target.value })}
         sx={fieldSx}
+        slotProps={selectSlotProps}
       >
         <MenuItem value="all">All branches</MenuItem>
         {branchOptions.map((branch) => (
@@ -117,6 +165,7 @@ export default function FilterBar({
         value={periods.includes(filters.period) ? filters.period : "all"}
         onChange={(event) => push({ period: event.target.value })}
         sx={fieldSx}
+        slotProps={selectSlotProps}
       >
         <MenuItem value="all">All periods</MenuItem>
         {periods.map((period) => (
@@ -132,6 +181,7 @@ export default function FilterBar({
         value={filters.schedule}
         onChange={(event) => push({ schedule: event.target.value as PortalFilters["schedule"] })}
         sx={fieldSx}
+        slotProps={selectSlotProps}
       >
         <MenuItem value="all">All schedules</MenuItem>
         <MenuItem value="01">Schedule 01 sales</MenuItem>
@@ -145,6 +195,7 @@ export default function FilterBar({
         value={filters.status}
         onChange={(event) => push({ status: event.target.value as PortalFilters["status"] })}
         sx={fieldSx}
+        slotProps={selectSlotProps}
       >
         <MenuItem value="all">All</MenuItem>
         <MenuItem value="Cleared">Cleared</MenuItem>
@@ -152,6 +203,20 @@ export default function FilterBar({
         <MenuItem value="Rejected">Exceptions</MenuItem>
         <MenuItem value="Skipped">Skipped</MenuItem>
       </TextField>
+      </Stack>
+      {account ? (
+        <Stack
+          direction="row"
+          sx={{
+            display: { xs: "none", md: "flex" },
+            alignItems: "stretch",
+            flexShrink: 0,
+          }}
+        >
+          <Divider orientation="vertical" flexItem />
+          <Stack sx={{ justifyContent: "center", px: 1.75 }}>{account}</Stack>
+        </Stack>
+      ) : null}
     </Stack>
   );
 }

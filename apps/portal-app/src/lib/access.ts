@@ -1,10 +1,17 @@
 import "server-only";
 import { cache } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { portalRoles, type PortalRole } from "@invoz/common";
 import { membershipRow, organizationRow, prisma } from "@invoz/database";
 import { readFilters } from "@/lib/filters";
+import {
+  classifyHost,
+  hostnameFrom,
+  organizationCookie,
+  readOrganizationCookie,
+  requireOrganizationHost,
+} from "@/lib/host";
 import { sessionSupabase } from "@/lib/session";
 import type { PortalFilters } from "@/lib/types";
 
@@ -29,16 +36,12 @@ export function permissions(role: PortalRole) {
 }
 
 async function requestedSlug(): Promise<string | null> {
-  const host = (await headers()).get("host")?.split(":")[0] ?? "";
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN;
-  if (!root || host === "localhost" || host.endsWith(".localhost")) {
-    return null;
-  }
-  const suffix = `.${root}`;
-  if (!host.endsWith(suffix) || host === root) {
-    return null;
-  }
-  return host.slice(0, -suffix.length);
+  const headerList = await headers();
+  const hostname = hostnameFrom(headerList.get("x-portal-host") ?? headerList.get("host"));
+  const portalHost = classifyHost(hostname);
+  if (portalHost.kind === "organization") return portalHost.slug;
+  if (requireOrganizationHost()) redirect("/auth/login");
+  return readOrganizationCookie((await cookies()).get(organizationCookie)?.value);
 }
 
 function asRole(role: string): PortalRole {
@@ -59,8 +62,8 @@ export const resolveAccess = cache(async (): Promise<Access> => {
 
   const search = (await headers()).get("x-portal-search") ?? "";
   const filters = readFilters(search);
-  const requestedOrg = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("org");
   const slug = await requestedSlug();
+  if (!slug) redirect("/auth/login");
   const memberships = (
     await prisma.membership.findMany({ where: { user_id: user.id } })
   ).map(membershipRow);
@@ -74,10 +77,8 @@ export const resolveAccess = cache(async (): Promise<Access> => {
     })
   )
     .map(organizationRow)
-    .filter((item) => (slug ? item.slug === slug : true));
-  const hostPinned = Boolean(slug);
-  const organization =
-    (!hostPinned && organizations.find((item) => String(item.id) === requestedOrg)) || organizations[0];
+    .filter((item) => item.slug === slug);
+  const organization = organizations[0];
   if (!organization) {
     redirect("/auth/login?error=membership");
   }
@@ -99,7 +100,7 @@ export const resolveAccess = cache(async (): Promise<Access> => {
     role: asRole(membership.role),
     organization,
     organizations,
-    hostPinned,
+    hostPinned: true,
     filters,
   };
 });

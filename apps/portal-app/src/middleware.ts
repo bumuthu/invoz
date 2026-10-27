@@ -1,14 +1,34 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  authCookieDomain,
+  classifyHost,
+  defaultPortalHost,
+  hostnameFrom,
+  organizationCookie,
+  readOrganizationCookie,
+  requireOrganizationHost,
+} from "@/lib/host";
 import { supabasePublicEnv } from "@/lib/supabase-env";
 
 const loginPath = "/auth/login";
 
 export async function middleware(request: NextRequest) {
+  const hostname = hostnameFrom(request.headers.get("x-forwarded-host") ?? request.headers.get("host"));
+  request.headers.set("x-portal-host", hostname);
   request.headers.set("x-portal-search", request.nextUrl.search);
+
+  const portalHost = classifyHost(hostname);
+  const canonical = defaultPortalHost();
+  if (requireOrganizationHost() && portalHost.kind === "default" && canonical && hostname !== canonical) {
+    return NextResponse.redirect(new URL(loginPath, `https://${canonical}`));
+  }
+
+  const domain = authCookieDomain(hostname);
   let response = NextResponse.next({ request });
   const { url, key } = supabasePublicEnv();
   const supabase = createServerClient(url, key, {
+    cookieOptions: domain ? { domain, secure: true, path: "/", sameSite: "lax" } : undefined,
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -29,15 +49,21 @@ export async function middleware(request: NextRequest) {
   const user = data.user;
   const path = request.nextUrl.pathname;
   const isLogin = path === loginPath;
+  const hasError = Boolean(request.nextUrl.searchParams.get("error"));
+  const orgSlug = readOrganizationCookie(request.cookies.get(organizationCookie)?.value);
 
-  if (!user && !isLogin) {
-    return redirectWithSession(request, response, loginPath);
+  if (portalHost.kind === "default") {
+    if (requireOrganizationHost()) {
+      if (!isLogin) return redirectWithSession(request, response, loginPath);
+      return response;
+    }
+    if ((!user || !orgSlug) && !isLogin) return redirectWithSession(request, response, loginPath);
+    if (user && orgSlug && isLogin && !hasError) return redirectWithSession(request, response, "/");
+    return response;
   }
 
-  if (user && isLogin && !request.nextUrl.searchParams.get("error")) {
-    return redirectWithSession(request, response, "/");
-  }
-
+  if (!user && !isLogin) return redirectWithSession(request, response, loginPath);
+  if (user && isLogin && !hasError) return redirectWithSession(request, response, "/");
   return response;
 }
 

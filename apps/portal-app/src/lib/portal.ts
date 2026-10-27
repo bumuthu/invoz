@@ -61,7 +61,7 @@ function branchKey(entityId: number, code: string): string {
   return `${entityId}:${code}`;
 }
 
-export const loadPortal = cache(async (): Promise<PortalData> => {
+const loadContext = cache(async () => {
   const access = await resolveAccess();
   const filters = access.filters;
   const organizationId = BigInt(access.organization.id);
@@ -69,18 +69,13 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN;
   const requestHost = (await headers()).get("host")?.split(":")[0] ?? "";
 
-  const [entityRecords, membershipRecords, usageRecords, accountResult] = await Promise.all([
-    prisma.legalEntity.findMany({ where: { organization_id: organizationId }, orderBy: { name: "asc" } }),
-    prisma.membership.findMany({ where: { organization_id: organizationId } }),
-    prisma.invoiceUsage.findMany({ where: { organization_id: organizationId } }),
-    supabase().auth.admin.listUsers({ perPage: 1000 }),
-  ]);
+  const entityRecords = await prisma.legalEntity.findMany({
+    where: { organization_id: organizationId },
+    orderBy: { name: "asc" },
+  });
   const entities = entityRecords.map(legalEntityRow);
   if (entities.length === 0) {
     throw new Error(`${access.organization.name} has no legal entity`);
-  }
-  if (accountResult.error) {
-    throw new Error(`auth users: ${accountResult.error.message}`);
   }
 
   const selectedEntities =
@@ -89,31 +84,111 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
   const appliedFilters =
     filters.entityId !== "all" && selectedEntities.length === 0 ? { ...filters, entityId: "all" } : filters;
   const entityIds = scopedEntities.map((entity) => BigInt(entity.id));
+
+  const [branchRecords, invoiceDateRows, adjustmentDateRows, inboundDateRows] = await Promise.all([
+    prisma.branch.findMany({ where: { legal_entity_id: { in: entityIds } }, orderBy: { name: "asc" } }),
+    prisma.outboundInvoice.findMany({
+      where: { organization_id: organizationId, legal_entity_id: { in: entityIds } },
+      select: { invoice_date: true },
+      distinct: ["invoice_date"],
+    }),
+    prisma.outboundAdjustment.findMany({
+      where: { organization_id: organizationId, legal_entity_id: { in: entityIds } },
+      select: { adjustment_date: true },
+      distinct: ["adjustment_date"],
+    }),
+    prisma.inboundInvoice.findMany({
+      where: { organization_id: organizationId, legal_entity_id: { in: entityIds } },
+      select: { invoice_date: true },
+      distinct: ["invoice_date"],
+    }),
+  ]);
+
+  const periods = [
+    ...new Set(
+      [
+        ...invoiceDateRows.map((row) => row.invoice_date.toISOString().slice(0, 7)),
+        ...adjustmentDateRows.map((row) => row.adjustment_date.toISOString().slice(0, 7)),
+        ...inboundDateRows.map((row) => row.invoice_date.toISOString().slice(0, 7)),
+      ].filter((period) => period !== ""),
+    ),
+  ].sort((left, right) => (left < right ? 1 : -1));
+
+  return {
+    access,
+    flags,
+    organizationId,
+    root,
+    requestHost,
+    entities,
+    appliedFilters,
+    entityIds,
+    branches: branchRecords.map(branchRow),
+    periods,
+    showOrganization: !access.hostPinned && access.organizations.length > 1,
+  };
+});
+
+function shellFrom(ctx: Awaited<ReturnType<typeof loadContext>>) {
+  const { access, root, requestHost, entities, branches, periods, appliedFilters, showOrganization } = ctx;
+  const entityName = new Map(entities.map((entity) => [entity.id, entity.name]));
+  return {
+    organization: {
+      id: String(access.organization.id),
+      name: access.organization.name,
+      slug: access.organization.slug,
+      host: root ? `${access.organization.slug}.${root}` : requestHost,
+      monthlyAllowance: access.organization.monthly_allowance,
+    },
+    organizations: access.organizations.map((organization) => ({
+      id: String(organization.id),
+      name: organization.name,
+    })),
+    hostPinned: access.hostPinned,
+    currentUser: {
+      name: access.name,
+      email: access.email,
+      role: portalRoleLabel(access.role),
+      roleKey: access.role,
+    },
+    canAudit: ctx.flags.canAudit,
+    entities: entities.map((entity) => ({
+      id: String(entity.id),
+      name: entity.name,
+      tin: entity.tin,
+    })),
+    branches: branches.map((branch) => ({
+      id: branchKey(branch.legal_entity_id, branch.code),
+      code: branch.code,
+      name: branch.name,
+      entityId: String(branch.legal_entity_id),
+      entity: entityName.get(branch.legal_entity_id) ?? String(branch.legal_entity_id),
+      nextSerial: "—",
+    })),
+    periods,
+    filters: appliedFilters,
+    query: writeFilters(appliedFilters, String(access.organization.id), showOrganization),
+  };
+}
+
+export const loadShell = cache(async () => shellFrom(await loadContext()));
+
+export const loadPortal = cache(async (): Promise<PortalData> => {
+  const ctx = await loadContext();
+  const shell = shellFrom(ctx);
+  const { flags, organizationId, entities, appliedFilters, entityIds, branches } = ctx;
   const range = monthRange(appliedFilters.period);
 
-  const [branchRecords, counterRecords, mappingRecords, invoiceDateRows, adjustmentDateRows, inboundDateRows] =
-    await Promise.all([
-      prisma.branch.findMany({ where: { legal_entity_id: { in: entityIds } }, orderBy: { name: "asc" } }),
-      prisma.serialCounter.findMany({ where: { legal_entity_id: { in: entityIds } } }),
-      prisma.fieldMapping.findMany({ where: { legal_entity_id: { in: entityIds } }, orderBy: { source_column: "asc" } }),
-      prisma.outboundInvoice.findMany({
-        where: { organization_id: organizationId, legal_entity_id: { in: entityIds } },
-        select: { invoice_date: true },
-        distinct: ["invoice_date"],
-      }),
-      prisma.outboundAdjustment.findMany({
-        where: { organization_id: organizationId, legal_entity_id: { in: entityIds } },
-        select: { adjustment_date: true },
-        distinct: ["adjustment_date"],
-      }),
-      prisma.inboundInvoice.findMany({
-        where: { organization_id: organizationId, legal_entity_id: { in: entityIds } },
-        select: { invoice_date: true },
-        distinct: ["invoice_date"],
-      }),
-    ]);
-
-  const branches = branchRecords.map(branchRow);
+  const [counterRecords, mappingRecords, membershipRecords, usageRecords, accountResult] = await Promise.all([
+    prisma.serialCounter.findMany({ where: { legal_entity_id: { in: entityIds } } }),
+    prisma.fieldMapping.findMany({ where: { legal_entity_id: { in: entityIds } }, orderBy: { source_column: "asc" } }),
+    prisma.membership.findMany({ where: { organization_id: organizationId } }),
+    prisma.invoiceUsage.findMany({ where: { organization_id: organizationId } }),
+    supabase().auth.admin.listUsers({ perPage: 1000 }),
+  ]);
+  if (accountResult.error) {
+    throw new Error(`auth users: ${accountResult.error.message}`);
+  }
   const counters = counterRecords.map(serialCounterRow);
   const mappings = mappingRecords.map(fieldMappingRow);
   const selectedBranch = branches.filter((branch) => branchKey(branch.legal_entity_id, branch.code) === appliedFilters.branch);
@@ -196,16 +271,6 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
       ? []
       : purchases.map(({ vatValue: _vat, month: _month, ...row }) => row);
 
-  const periods = [
-    ...new Set(
-      [
-        ...invoiceDateRows.map((row) => row.invoice_date.toISOString().slice(0, 7)),
-        ...adjustmentDateRows.map((row) => row.adjustment_date.toISOString().slice(0, 7)),
-        ...inboundDateRows.map((row) => row.invoice_date.toISOString().slice(0, 7)),
-      ].filter((period) => period !== ""),
-    ),
-  ].sort((left, right) => (left < right ? 1 : -1));
-
   const preferredGazette = gazettePeriod(appliedFilters.period);
   const branchViews: BranchView[] = branches.map((branch) => {
     const counter = counters
@@ -272,42 +337,16 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     .sort((left, right) => portalRoles.indexOf(left.role) - portalRoles.indexOf(right.role));
   const usageRows = usageRecords.map(invoiceUsageRow);
   const usage = [...usageRows].sort((left, right) => (left.period < right.period ? 1 : -1))[0];
-  const showOrganization = !access.hostPinned && access.organizations.length > 1;
 
   return {
-    organization: {
-      id: String(access.organization.id),
-      name: access.organization.name,
-      slug: access.organization.slug,
-      host: root ? `${access.organization.slug}.${root}` : requestHost,
-      monthlyAllowance: access.organization.monthly_allowance,
-    },
-    organizations: access.organizations.map((organization) => ({
-      id: String(organization.id),
-      name: organization.name,
-    })),
-    hostPinned: access.hostPinned,
-    currentUser: {
-      name: access.name,
-      email: access.email,
-      role: portalRoleLabel(access.role),
-      roleKey: access.role,
-    },
+    ...shell,
     ...flags,
     users,
     usage: {
       clearedCount: usage?.cleared_count ?? 0,
       monthLabel: usage ? monthTitle(usage.period) : monthTitle(new Date().toISOString()),
     },
-    entities: entities.map((entity) => ({
-      id: String(entity.id),
-      name: entity.name,
-      tin: entity.tin,
-    })),
     branches: branchViews,
-    periods,
-    filters: appliedFilters,
-    query: writeFilters(appliedFilters, String(access.organization.id), showOrganization),
     fieldMappings: mappings.map((row) => ({
       source: row.source_column,
       target: row.target_field,
