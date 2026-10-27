@@ -71,9 +71,15 @@ const theme = createTheme({
         },
         body: {
           backgroundColor: tokens.background,
-          backgroundImage: `radial-gradient(1100px 560px at 8% -10%, ${tokens.glow} 0%, transparent 58%), radial-gradient(900px 520px at 100% 0%, ${tokens.glowAlt} 0%, transparent 50%)`,
-          backgroundAttachment: "fixed",
           WebkitFontSmoothing: "antialiased",
+        },
+        "@media print": {
+          ".no-print": {
+            display: "none !important",
+          },
+          body: {
+            backgroundColor: tokens.paper,
+          },
         },
       },
     },
@@ -113,7 +119,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           border: `1px solid ${tokens.divider}`,
-          borderRadius: 20,
+          borderRadius: 16,
           boxShadow: tokens.shadow,
           overflow: "hidden",
         },
@@ -146,12 +152,12 @@ const theme = createTheme({
           color: tokens.textSecondary,
           fontWeight: 600,
           "&.Mui-selected": {
-            backgroundColor: tokens.primary,
+            backgroundColor: tokens.text,
             color: tokens.contrast,
-            borderColor: tokens.primary,
+            borderColor: tokens.text,
           },
           "&.Mui-selected:hover": {
-            backgroundColor: tokens.primaryDark,
+            backgroundColor: tokens.inkHover,
           },
         },
       },

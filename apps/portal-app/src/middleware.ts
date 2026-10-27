@@ -5,6 +5,7 @@ import { supabasePublicEnv } from "@/lib/supabase-env";
 const loginPath = "/auth/login";
 
 export async function middleware(request: NextRequest) {
+  request.headers.set("x-portal-search", request.nextUrl.search);
   let response = NextResponse.next({ request });
   const { url, key } = supabasePublicEnv();
   const supabase = createServerClient(url, key, {

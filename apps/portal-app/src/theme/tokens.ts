@@ -1,26 +1,26 @@
 /**
  * Single source for portal color. Change a value here and the whole app follows.
  * Components must use theme palette keys, never a hex color of their own.
+ * Ink is near-black. Accent is the landing-app orange.
  */
 export const tokens = {
-  primary: "#4F46E5",
-  primaryDark: "#4338CA",
-  primarySoft: "#EEF0FF",
-  primaryMuted: "#DDD9FF",
-  background: "#E8EDF7",
+  primary: "#EA580C",
+  primaryDark: "#C2410C",
+  primarySoft: "#F4F1EC",
+  primaryMuted: "#E7E2DA",
+  background: "#F7F6F3",
   paper: "#FFFFFF",
-  text: "#1B1830",
-  textSecondary: "#6E7488",
-  divider: "#E4E7F2",
-  success: "#0F9F6E",
-  successSoft: "#E5F8F0",
+  text: "#111111",
+  textSecondary: "#5E5A53",
+  divider: "#E6E2DA",
+  success: "#0F7A4A",
+  successSoft: "#E7F6EE",
   warning: "#B45309",
-  warningSoft: "#FEF4E6",
-  error: "#E11D48",
-  errorSoft: "#FDE8EE",
+  warningSoft: "#FEF4E8",
+  error: "#C2413B",
+  errorSoft: "#FDECEC",
   contrast: "#FFFFFF",
-  glow: "#D5DFFF",
-  glowAlt: "#E7D9FF",
-  neutralSoft: "#F1F2F7",
-  shadow: "0 10px 30px rgba(67, 56, 202, 0.08), 0 1px 2px rgba(67, 56, 202, 0.04)",
+  neutralSoft: "#F4F1EC",
+  inkHover: "#2A2A2A",
+  shadow: "0 10px 28px rgba(17, 17, 17, 0.06), 0 1px 2px rgba(17, 17, 17, 0.04)",
 } as const;

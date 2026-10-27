@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import AppShell from "@/components/AppShell";
 import { loadPortal } from "@/lib/portal";
 
@@ -11,8 +12,20 @@ export default async function PortalLayout({
   const portal = await loadPortal();
 
   return (
-    <AppShell organization={portal.organization} currentUser={portal.currentUser}>
-      {children}
-    </AppShell>
+    <Suspense>
+      <AppShell
+        organization={portal.organization}
+        organizations={portal.organizations}
+        hostPinned={portal.hostPinned}
+        currentUser={portal.currentUser}
+        canAudit={portal.canAudit}
+        filters={portal.filters}
+        entities={portal.entities}
+        branches={portal.branches}
+        periods={portal.periods}
+      >
+        {children}
+      </AppShell>
+    </Suspense>
   );
 }

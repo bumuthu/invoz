@@ -6,7 +6,12 @@ import PageHeader from "@/components/PageHeader";
 import { loadPortal } from "@/lib/portal";
 
 export default async function BranchesPage() {
-  const { branches } = await loadPortal();
+  const portal = await loadPortal();
+  const branches =
+    portal.filters.branch === "all"
+      ? portal.branches
+      : portal.branches.filter((branch) => branch.id === portal.filters.branch);
+
   return (
     <>
       <PageHeader
@@ -14,29 +19,35 @@ export default async function BranchesPage() {
         description="Each depot keeps its own monthly serial. The code is the QQQQ segment."
       />
       <Card>
-        {branches.map((branch, index) => (
-          <Stack
-            key={branch.code}
-            direction="row"
-            sx={{
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              gap: 2,
-              px: 2.5,
-              py: 2,
-              borderTop: index === 0 ? 0 : 1,
-              borderColor: "divider",
-            }}
-          >
-            <Box>
-              <Typography sx={{ fontWeight: 600 }}>{branch.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {branch.code}
-              </Typography>
-            </Box>
-            <Typography sx={{ fontWeight: 600, color: "primary.main" }}>{branch.nextSerial}</Typography>
-          </Stack>
-        ))}
+        {branches.length === 0 ? (
+          <Typography color="text.secondary" sx={{ px: 2.5, py: 2 }}>
+            No branches in this view.
+          </Typography>
+        ) : (
+          branches.map((branch, index) => (
+            <Stack
+              key={branch.id}
+              direction="row"
+              sx={{
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: 2,
+                px: 2.5,
+                py: 2,
+                borderTop: index === 0 ? 0 : 1,
+                borderColor: "divider",
+              }}
+            >
+              <Box>
+                <Typography sx={{ fontWeight: 600 }}>{branch.name}</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {branch.entity} · {branch.code}
+                </Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 600, color: "primary.main" }}>{branch.nextSerial}</Typography>
+            </Stack>
+          ))
+        )}
       </Card>
     </>
   );

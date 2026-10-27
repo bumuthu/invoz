@@ -1,11 +1,14 @@
 "use client";
 
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
+import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
+import ReportOutlinedIcon from "@mui/icons-material/ReportOutlined";
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import AppBar from "@mui/material/AppBar";
@@ -22,7 +25,8 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import FilterBar from "@/components/FilterBar";
 import Initials from "@/components/Initials";
 import Logo from "@/components/Logo";
 import { browserSupabase } from "@/lib/supabase-browser";
@@ -35,12 +39,15 @@ const sections = [
     items: [
       { href: "/", label: "Overview", icon: <SpaceDashboardOutlinedIcon fontSize="small" /> },
       { href: "/invoices", label: "Invoices", icon: <ReceiptLongOutlinedIcon fontSize="small" /> },
+      { href: "/exceptions", label: "Exceptions", icon: <ReportOutlinedIcon fontSize="small" /> },
       { href: "/schedule-02", label: "Schedule 02", icon: <FactCheckOutlinedIcon fontSize="small" /> },
+      { href: "/audit", label: "Audit", icon: <PolicyOutlinedIcon fontSize="small" />, audit: true },
     ],
   },
   {
     label: "Administration",
     items: [
+      { href: "/ingestion", label: "Ingestion", icon: <CloudSyncOutlinedIcon fontSize="small" /> },
       { href: "/setup/mapping", label: "Field mapping", icon: <AccountTreeOutlinedIcon fontSize="small" /> },
       { href: "/setup/branches", label: "Branches", icon: <StorefrontOutlinedIcon fontSize="small" /> },
       { href: "/users", label: "Users", icon: <GroupOutlinedIcon fontSize="small" /> },
@@ -49,15 +56,30 @@ const sections = [
   },
 ];
 
+function showsFilters(pathname: string) {
+  return (
+    pathname === "/" ||
+    pathname.startsWith("/invoices") ||
+    pathname.startsWith("/exceptions") ||
+    pathname.startsWith("/schedule-02") ||
+    pathname.startsWith("/audit") ||
+    pathname.startsWith("/ingestion") ||
+    pathname.startsWith("/setup/")
+  );
+}
+
 function SidebarContent({
   organization,
+  canAudit,
   onNavigate,
 }: {
   organization: PortalData["organization"];
+  canAudit: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const search = useSearchParams().toString();
 
   return (
     <Stack sx={{ height: "100%" }}>
@@ -87,7 +109,7 @@ function SidebarContent({
               </Typography>
             ) : null}
             <List disablePadding>
-              {section.items.map((item) => {
+              {section.items.filter((item) => !("audit" in item) || canAudit).map((item) => {
                 const active =
                   item.href === "/"
                     ? pathname === "/"
@@ -97,24 +119,26 @@ function SidebarContent({
                     key={item.href}
                     selected={active}
                     onClick={() => {
-                      router.push(item.href);
+                      router.push(search ? `${item.href}?${search}` : item.href);
                       onNavigate?.();
                     }}
                     sx={{
                       mb: 0.5,
-                      borderRadius: 999,
+                      borderRadius: 2,
                       py: 0.9,
-                      px: 1.5,
-                      color: active ? "primary.contrastText" : "text.secondary",
+                      pl: 1.25,
+                      borderLeft: "3px solid",
+                      borderColor: active ? "primary.main" : "transparent",
+                      color: active ? "text.primary" : "text.secondary",
                       "&:hover": {
-                        bgcolor: active ? "primary.dark" : "action.hover",
+                        bgcolor: "action.hover",
                       },
                       "&.Mui-selected": {
-                        bgcolor: "primary.main",
-                        color: "primary.contrastText",
+                        bgcolor: "action.hover",
+                        color: "text.primary",
                       },
                       "&.Mui-selected:hover": {
-                        bgcolor: "primary.dark",
+                        bgcolor: "action.hover",
                       },
                     }}
                   >
@@ -132,7 +156,7 @@ function SidebarContent({
           </Box>
         ))}
       </Box>
-      <Box sx={{ px: 2.5, py: 2.25 }}>
+      <Box className="no-print" sx={{ px: 2.5, py: 2.25 }}>
         <Typography variant="caption" color="text.secondary" display="block">
           {organization.host}
         </Typography>
@@ -171,14 +195,31 @@ function AccountChip({ currentUser }: { currentUser: PortalData["currentUser"] }
 export default function AppShell({
   children,
   organization,
+  organizations,
+  hostPinned,
   currentUser,
+  canAudit,
+  filters,
+  entities,
+  branches,
+  periods,
 }: {
   children: React.ReactNode;
   organization: PortalData["organization"];
+  organizations: PortalData["organizations"];
+  hostPinned: boolean;
   currentUser: PortalData["currentUser"];
+  canAudit: boolean;
+  filters: PortalData["filters"];
+  entities: PortalData["entities"];
+  branches: PortalData["branches"];
+  periods: PortalData["periods"];
 }) {
   const [open, setOpen] = useState(false);
-  const drawer = <SidebarContent organization={organization} onNavigate={() => setOpen(false)} />;
+  const pathname = usePathname();
+  const drawer = (
+    <SidebarContent organization={organization} canAudit={canAudit} onNavigate={() => setOpen(false)} />
+  );
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", p: { xs: 0, md: 1.5 }, gap: { md: 1.5 } }}>
@@ -215,6 +256,7 @@ export default function AppShell({
         {drawer}
       </Drawer>
       <Paper
+        className="no-print"
         component="nav"
         sx={{
           display: { xs: "none", md: "flex" },
@@ -245,14 +287,28 @@ export default function AppShell({
       >
         <Stack
           direction="row"
+          className="no-print"
           sx={{
             display: { xs: "none", md: "flex" },
             justifyContent: "flex-end",
-            mb: 3,
+            mb: 2,
           }}
         >
           <AccountChip currentUser={currentUser} />
         </Stack>
+        {showsFilters(pathname) ? (
+          <Box sx={{ position: "sticky", top: 12, zIndex: 2 }}>
+            <FilterBar
+              filters={filters}
+              entities={entities}
+              branches={branches}
+              periods={periods}
+              organizations={organizations}
+              organizationId={organization.id}
+              showOrganization={!hostPinned && organizations.length > 1}
+            />
+          </Box>
+        ) : null}
         {children}
       </Box>
     </Box>
