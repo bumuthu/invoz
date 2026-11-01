@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import AppLoading from "@/components/AppLoading";
 import AppShell from "@/components/AppShell";
+import { clearOrganization } from "@/lib/portal-entry";
 import { loadShell } from "@/lib/portal";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ async function PortalFrame({ children }: { children: React.ReactNode }) {
       entities={shell.entities}
       branches={shell.branches}
       periods={shell.periods}
+      clearOrganization={clearOrganization}
     >
       {children}
     </AppShell>

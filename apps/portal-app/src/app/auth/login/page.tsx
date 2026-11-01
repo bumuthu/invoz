@@ -7,6 +7,7 @@ import {
   portalRootDomain,
   readOrganizationCookie,
 } from "@/lib/host";
+import { clearOrganization, openOrganization } from "@/lib/portal-entry";
 import { sessionSupabase } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,8 @@ export default async function LoginPage({
       lockOrganization={portalHost.kind === "organization"}
       signedInEmail={user?.email ?? ""}
       error={params.error}
+      openOrganization={openOrganization}
+      clearOrganization={clearOrganization}
     />
   );
 }

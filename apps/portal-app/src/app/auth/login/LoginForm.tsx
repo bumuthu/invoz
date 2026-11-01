@@ -11,7 +11,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { isOrganizationSlug } from "@invoz/common";
 import Logo from "@/components/Logo";
-import { clearOrganization, openOrganization } from "@/lib/portal-entry";
 import { browserSupabase } from "@/lib/supabase-browser";
 
 export default function LoginForm({
@@ -20,12 +19,18 @@ export default function LoginForm({
   lockOrganization,
   signedInEmail,
   error,
+  openOrganization,
+  clearOrganization,
 }: {
   hostLabel: string;
   organizationSlug: string;
   lockOrganization: boolean;
   signedInEmail: string;
   error?: string;
+  openOrganization: (
+    slug: string,
+  ) => Promise<{ ok: true; href: string } | { ok: false; error: string }>;
+  clearOrganization: () => Promise<void>;
 }) {
   const router = useRouter();
   const [organization, setOrganization] = useState(organizationSlug);

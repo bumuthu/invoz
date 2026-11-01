@@ -34,7 +34,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FilterBar from "@/components/FilterBar";
 import Initials from "@/components/Initials";
 import Logo from "@/components/Logo";
-import { clearOrganization } from "@/lib/portal-entry";
 import { browserSupabase } from "@/lib/supabase-browser";
 import type { PortalData } from "@/lib/types";
 
@@ -199,10 +198,12 @@ function AccountDetail({ label, value }: { label: string; value: string }) {
 function AccountMenu({
   currentUser,
   organizationName,
+  clearOrganization,
   compact = false,
 }: {
   currentUser: PortalData["currentUser"];
   organizationName: string;
+  clearOrganization: () => Promise<void>;
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -326,6 +327,7 @@ export default function AppShell({
   entities,
   branches,
   periods,
+  clearOrganization,
 }: {
   children: React.ReactNode;
   organization: PortalData["organization"];
@@ -337,6 +339,7 @@ export default function AppShell({
   entities: PortalData["entities"];
   branches: PortalData["branches"];
   periods: PortalData["periods"];
+  clearOrganization: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -374,7 +377,12 @@ export default function AppShell({
           <Box sx={{ ml: 1, flex: 1 }}>
             <Logo height={28} />
           </Box>
-          <AccountMenu currentUser={currentUser} organizationName={organization.name} compact />
+          <AccountMenu
+            currentUser={currentUser}
+            organizationName={organization.name}
+            clearOrganization={clearOrganization}
+            compact
+          />
         </Toolbar>
       </AppBar>
       <Drawer
@@ -442,7 +450,7 @@ export default function AppShell({
                 organizations={organizations}
                 organizationId={organization.id}
                 showOrganization={!hostPinned && organizations.length > 1}
-                account={<AccountMenu currentUser={currentUser} organizationName={organization.name} compact />}
+                account={<AccountMenu currentUser={currentUser} organizationName={organization.name} clearOrganization={clearOrganization} compact />}
               />
             </Box>
           ) : (
@@ -450,7 +458,7 @@ export default function AppShell({
           )}
           {showsFilters(route) ? null : (
             <Box sx={{ display: { xs: "none", md: "block" }, flexShrink: 0 }}>
-              <AccountMenu currentUser={currentUser} organizationName={organization.name} compact />
+              <AccountMenu currentUser={currentUser} organizationName={organization.name} clearOrganization={clearOrganization} compact />
             </Box>
           )}
         </Stack>
