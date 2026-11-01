@@ -15,13 +15,15 @@ S3, SQS, the invoice-engine Lambda, EventBridge, and the two HTTP APIs come from
 | Invoice Lambda and its role | `invoz-{env}-invoice-engine`, `invoz-{env}-invoice-engine-role` |
 | RAMIS Lambda, role, and HTTP API | `invoz-{env}-ramis-engine`, `invoz-{env}-ramis-engine-role` |
 | Landing Lambda, role, and HTTP API | `invoz-{env}-landing-service`, `invoz-{env}-landing-service-role` |
+| RAMIS hostname | `stag-ramis.api.invoz.lk`, or `ramis.api.invoz.lk` on prod |
+| Landing hostname | `stag-landing.api.invoz.lk`, or `landing.api.invoz.lk` on prod |
 | Transfer Family role | `invoz-{env}-transfer` |
 
 `npm run provision` runs S3, SQS, Lambda, and EventBridge in one shot. Use the steps below when you want to create one resource at a time. EventBridge has no script of its own. The full `npm run provision` command is what attaches it, and that command is safe to repeat.
 
 ## Before you start
 
-Install the AWS CLI, Node.js, `zip`, and `python3`. The machine's AWS credentials need permission to create S3 buckets, SQS queues, EventBridge rules, IAM roles, Lambda functions, and HTTP APIs (`apigatewayv2`). The SFTP step also needs `transfer:*` on that account.
+Install the AWS CLI, Node.js, `zip`, and `python3`. The machine's AWS credentials need permission to create S3 buckets, SQS queues, EventBridge rules, IAM roles, Lambda functions, SNS topics, CloudWatch alarms, and HTTP APIs (`apigatewayv2`), including custom domain names and API mappings. The RAMIS and landing publishes call `acm:DescribeCertificate` on `API_CERTIFICATE_ARN`. Requesting that certificate needs `acm:RequestCertificate`. The SFTP step also needs `transfer:*` on that account.
 
 ```bash
 aws sts get-caller-identity
@@ -38,6 +40,7 @@ cp tools/deployment/env.example tools/deployment/.env
 | --- | --- | --- |
 | `AWS_REGION` | Every step | Defaults to `ap-south-1` when unset. |
 | `APP_ENV` | Every step | `stag` or `prod`. Prefixes every AWS name. |
+| `API_CERTIFICATE_ARN` | RAMIS and landing | ISSUED ACM certificate in `AWS_REGION`. `*.api.invoz.lk` covers both hostnames. |
 | `ORGANIZATION_ID` | SFTP, per organization | Organization id from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
 
 Each Lambda takes its environment from the `.env` in its package. `tools/deployment/.env` is not copied onto a function.
@@ -230,7 +233,7 @@ aws sqs get-queue-url --queue-name invoz-${APP_ENV}-invoicing-pipeline-dlq.fifo 
 
 ## 4. Lambda
 
-Publishes `invoz-${APP_ENV}-invoice-engine` (Node.js 22, 512 MB, 60 second timeout) and maps `invoz-${APP_ENV}-invoicing-pipeline.fifo` to it with batch size 5. `packages/invoice-engine/.env` must contain `DATABASE_URL`. The publish copies the generated Prisma client into the zip. The queue from step 3 must exist.
+Publishes `invoz-${APP_ENV}-invoice-engine` (Node.js 22, 512 MB, 60 second timeout) and maps `invoz-${APP_ENV}-invoicing-pipeline.fifo` to it with batch size 5. `packages/invoice-engine/.env` must contain `DATABASE_URL`, `RAMIS_API_URL`, and `RAMIS_CLIENT_SECRET`. The publish exits while any of the three is empty. `RAMIS_API_URL` is `https://stag-ramis.api.invoz.lk` on staging and `https://ramis.api.invoz.lk` on prod, with no path. `RAMIS_CLIENT_SECRET` is the secret the RAMIS API checks. For the mock, copy `RAMIS_MOCK_CLIENT_SECRET` from `tools/ramis-engine/.env`. The publish copies the generated Prisma client into the zip. The queue from step 3 must exist. Step 5 runs this same publish, so those three values have to be set before `npm run provision` as well.
 
 ```bash
 npm run provision:lambda -w @invoz/deployment
@@ -252,7 +255,7 @@ aws lambda list-event-source-mappings \
 
 The role can read and write the shared invoice bucket, consume the work queue, and read Secrets Manager secrets named `invoz-${APP_ENV}/*`. This step does not create a secret.
 
-The worker environment is `packages/invoice-engine/.env`. It needs `DATABASE_URL` for the clearance transaction, and `RAMIS_API_URL` is the base URL printed by step 6. Set both, then run `npm run provision:lambda` again. That publish also creates alarm `invoz-${APP_ENV}-invoice-engine-ramis-commit-failed` on metric `Invoz/InvoiceEngine` `RamisClearedCommitFailed`, and sends it to SNS topic `invoz-${APP_ENV}-critical`.
+The worker environment is `packages/invoice-engine/.env`. `DATABASE_URL` is the clearance transaction. `RAMIS_API_URL` and `RAMIS_CLIENT_SECRET` are the RAMIS call. If either value changes after step 6, run `npm run provision:lambda` again. That publish also creates alarm `invoz-${APP_ENV}-invoice-engine-ramis-commit-failed` on metric `Invoz/InvoiceEngine` `RamisClearedCommitFailed`, and sends it to SNS topic `invoz-${APP_ENV}-critical`. The topic is created by this command. It has no email subscription until you add one.
 
 ## 5. EventBridge
 
@@ -329,27 +332,68 @@ Then read the queue, or the Lambda log group `/aws/lambda/invoz-${APP_ENV}-invoi
 
 ## 6. API Gateway
 
-Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with payload format 2.0. Neither API adds auth, throttling, or a custom domain. CORS for the landing site is handled inside `landing-service`.
+Two HTTP APIs, each forwarding `ANY /` and `ANY /{proxy+}` to one Lambda with payload format 2.0. Neither API adds auth or throttling. CORS for the landing site is handled inside `landing-service`. Each API is also served on a regional custom domain. TLS is 1.2. The hostname depends on `APP_ENV`:
+
+| `APP_ENV` | RAMIS | Landing |
+| --- | --- | --- |
+| `stag` | `stag-ramis.api.invoz.lk` | `stag-landing.api.invoz.lk` |
+| `prod` | `ramis.api.invoz.lk` | `landing.api.invoz.lk` |
 
 | API name | Lambda | Timeout | Memory | Caller |
 | --- | --- | --- | --- | --- |
 | `invoz-{env}-ramis-engine` | `invoz-{env}-ramis-engine` | 30 s | 512 MB | `invoz-{env}-invoice-engine`, through `RAMIS_API_URL` |
 | `invoz-{env}-landing-service` | `invoz-{env}-landing-service` | 20 s | 256 MB | `landing-app`, through `NEXT_PUBLIC_LANDING_API_URL` |
 
-`npm run provision:ramis` publishes `tools/ramis-engine/.env`. The function sets `search_path` to `ramis_engine`. `npm run provision:landing` publishes `packages/landing-service/.env`, which needs `DATABASE_URL`, and copies the generated Prisma client into the zip. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`.
+### Certificate
+
+Request one public certificate in the API region. `*.api.invoz.lk` covers all four hostnames. A certificate in another region cannot be attached to these regional domains.
+
+```bash
+aws acm request-certificate \
+  --region "$AWS_REGION" \
+  --domain-name "*.api.invoz.lk" \
+  --validation-method DNS \
+  --query CertificateArn \
+  --output text
+```
+
+In the `invoz.lk` hosted zone, create the CNAME that ACM prints under `DomainValidationOptions`. The record name is the validation host, not the API hostname.
+
+```bash
+aws acm describe-certificate \
+  --region "$AWS_REGION" \
+  --certificate-arn "$API_CERTIFICATE_ARN" \
+  --query 'Certificate.DomainValidationOptions[].ResourceRecord'
+```
+
+Wait until the status is `ISSUED`, then set `API_CERTIFICATE_ARN` in `tools/deployment/.env` and load it again:
+
+```bash
+aws acm wait certificate-validated \
+  --region "$AWS_REGION" \
+  --certificate-arn "$API_CERTIFICATE_ARN"
+
+set -a
+source tools/deployment/.env
+set +a
+```
+
+### Publish
+
+`npm run provision:ramis` publishes `tools/ramis-engine/.env`. That file must contain `RAMIS_DATABASE_URL` and `RAMIS_MOCK_CLIENT_SECRET`. The function sets `search_path` to `ramis_engine`. `npm run provision:landing` publishes `packages/landing-service/.env`, which must contain `DATABASE_URL`, and copies the generated Prisma client into the zip. Demo email is off unless `LANDING_EMAIL_ENABLED` is `true`. Both commands refuse to run until `API_CERTIFICATE_ARN` is an issued certificate in `AWS_REGION` that covers the hostname. Each command creates the custom domain when it is missing, maps it to the `$default` stage, and prints the Route 53 alias target. Create that alias after the command prints it. The target does not exist before the domain does.
 
 ```bash
 npm run provision:ramis
 npm run provision:landing
 ```
 
-`npm run provision:ramis` prints the value for `RAMIS_API_URL`. It is the API base URL, with no path:
+`npm run provision:ramis` prints the value for `RAMIS_API_URL`. It is the custom domain, with no path:
 
 ```text
-https://{api-id}.execute-api.{region}.amazonaws.com
+https://stag-ramis.api.invoz.lk
 ```
 
-The region in that host is `AWS_REGION` from `tools/deployment/.env`. Paste the printed URL into `RAMIS_API_URL` in `packages/invoice-engine/.env`, then publish the worker:
+On prod that host is `ramis.api.invoz.lk`. If `RAMIS_API_URL` in `packages/invoice-engine/.env` is not already that URL, paste it in, then publish the worker:
 
 ```bash
 set -a
@@ -358,21 +402,75 @@ set +a
 npm run provision:lambda -w @invoz/deployment
 ```
 
-`npm run provision:landing` prints a URL of the same shape. Set that as `NEXT_PUBLIC_LANDING_API_URL` on `landing-app`. It does not belong in `tools/deployment/.env`.
+`npm run provision:landing` prints `https://stag-landing.api.invoz.lk`, or `https://landing.api.invoz.lk` on prod. Set that as `NEXT_PUBLIC_LANDING_API_URL` on `landing-app`. It does not belong in `tools/deployment/.env`.
 
-Check both APIs:
+### Route 53
+
+In the `invoz.lk` hosted zone, create one alias A record per hostname. The console appends `.invoz.lk`, so the record name for staging RAMIS is `stag-ramis.api`.
+
+1. Route 53, Hosted zones, `invoz.lk`, Create record.
+2. Record name: `stag-ramis.api`, `stag-landing.api`, `ramis.api`, or `landing.api`.
+3. Record type: A. Turn on Alias.
+4. Route traffic to: Alias to API Gateway API, region `ap-south-1`.
+5. Choose the endpoint printed as the alias target, `d-xxxxxxxx.execute-api.ap-south-1.amazonaws.com`.
+
+The same record from the CLI, after you copy the target and alias hosted zone id from the provision output. `ZONE_ID` is the `invoz.lk` hosted zone, not the API Gateway zone.
 
 ```bash
-aws apigatewayv2 get-apis \
-  --region "$AWS_REGION" \
-  --query "Items[?Name=='invoz-${APP_ENV}-ramis-engine' || Name=='invoz-${APP_ENV}-landing-service'].{Name:Name,Endpoint:ApiEndpoint,Protocol:ProtocolType}"
+ZONE_ID=$(aws route53 list-hosted-zones-by-name \
+  --dns-name invoz.lk \
+  --query "HostedZones[?Name=='invoz.lk.'].Id | [0]" \
+  --output text)
+
+cat > /tmp/api-alias.json <<EOF
+{
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "stag-ramis.api.invoz.lk",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "ALIAS_HOSTED_ZONE_FROM_PROVISION",
+          "DNSName": "d-xxxxxxxx.execute-api.${AWS_REGION}.amazonaws.com",
+          "EvaluateTargetHealth": false
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws route53 change-resource-record-sets \
+  --hosted-zone-id "$ZONE_ID" \
+  --change-batch file:///tmp/api-alias.json
 ```
 
-Health checks:
+Repeat for the landing hostname in this environment. Prod uses `ramis.api.invoz.lk` and `landing.api.invoz.lk`, each with the target printed by that environment's publish. Do not point two hostnames at one API Gateway domain name.
+
+Check both domains for the current `APP_ENV`, then call health after the alias resolves:
 
 ```bash
-curl "$RAMIS_API_URL/health"
-curl "${NEXT_PUBLIC_LANDING_API_URL}/health"
+if [[ "$APP_ENV" == "prod" ]]; then
+  RAMIS_HOST=ramis.api.invoz.lk
+  LANDING_HOST=landing.api.invoz.lk
+else
+  RAMIS_HOST=stag-ramis.api.invoz.lk
+  LANDING_HOST=stag-landing.api.invoz.lk
+fi
+
+aws apigatewayv2 get-domain-name \
+  --domain-name "$RAMIS_HOST" \
+  --region "$AWS_REGION" \
+  --query 'DomainNameConfigurations[0].{Target:ApiGatewayDomainName,Zone:HostedZoneId}'
+
+aws apigatewayv2 get-domain-name \
+  --domain-name "$LANDING_HOST" \
+  --region "$AWS_REGION" \
+  --query 'DomainNameConfigurations[0].{Target:ApiGatewayDomainName,Zone:HostedZoneId}'
+
+curl "https://${RAMIS_HOST}/health"
+curl "https://${LANDING_HOST}/health"
 ```
 
 Landing `GET /health` returns `{ "ok": true }`. RAMIS `GET /health` returns `{ "status": "ok", "service": "ramis-mock" }` plus the ledger counts.

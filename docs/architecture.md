@@ -116,7 +116,7 @@ The mock stores clearances in schema `ramis_engine` and nowhere else. `search_pa
 | `src/server.ts` | Same routes for the local HTTP server. |
 | `src/postgres-store.ts` | Ledger reads and writes in schema `ramis_engine`. |
 
-`npm run provision:ramis` bundles that function, publishes it, and attaches the HTTP API. It prints the invoke URL. Set that URL as `RAMIS_API_URL` on the invoice-engine Lambda. The mock's own secret is `RAMIS_MOCK_CLIENT_SECRET`.
+`npm run provision:ramis` bundles that function, publishes it, and attaches the HTTP API at `stag-ramis.api.invoz.lk` or `ramis.api.invoz.lk`. It prints that URL. Set it as `RAMIS_API_URL` on the invoice-engine Lambda. The mock's own secret is `RAMIS_MOCK_CLIENT_SECRET`.
 
 ## Supabase
 
@@ -217,4 +217,4 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run provision` | `tools/deployment/provision.sh` |
 | `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
 
-`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`, `PORTAL_REQUIRE_ORG_HOST`). `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.
+`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_ROOT_DOMAIN`, `PORTAL_REQUIRE_ORG_HOST`). `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. The RAMIS and landing publishes also read `API_CERTIFICATE_ARN` from that file. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.

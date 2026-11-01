@@ -141,6 +141,9 @@ aws lambda add-permission \
   --source-arn "arn:aws:execute-api:${REGION}:${ACCOUNT_ID}:${API_ID}/*" \
   >/dev/null 2>&1 || true
 
+DOMAIN="$(http_api_host ramis)"
+attach_http_api_domain "$DOMAIN" "$API_ID"
 ENDPOINT=$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" --query ApiEndpoint --output text)
-echo "ramis-engine api: ${ENDPOINT}"
-echo "set RAMIS_API_URL=${ENDPOINT} in packages/invoice-engine/.env"
+echo "ramis-engine api: https://${DOMAIN}"
+echo "execute-api endpoint: ${ENDPOINT}"
+echo "set RAMIS_API_URL=https://${DOMAIN} in packages/invoice-engine/.env"

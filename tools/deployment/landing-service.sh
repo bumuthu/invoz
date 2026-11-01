@@ -145,6 +145,9 @@ aws lambda add-permission \
   --source-arn "arn:aws:execute-api:${REGION}:${ACCOUNT_ID}:${API_ID}/*" \
   >/dev/null 2>&1 || true
 
+DOMAIN="$(http_api_host landing)"
+attach_http_api_domain "$DOMAIN" "$API_ID"
 ENDPOINT=$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" --query ApiEndpoint --output text)
-echo "landing-service api: ${ENDPOINT}"
-echo "set NEXT_PUBLIC_LANDING_API_URL=${ENDPOINT} for the landing app"
+echo "landing-service api: https://${DOMAIN}"
+echo "execute-api endpoint: ${ENDPOINT}"
+echo "set NEXT_PUBLIC_LANDING_API_URL=https://${DOMAIN} for the landing app"
