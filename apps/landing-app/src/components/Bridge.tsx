@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
+import Logo from "@/components/Logo";
 
 const erps = [
   "S/4HANA",
@@ -50,7 +51,7 @@ function ErpLogo({ name }: { name: string }) {
   );
 }
 
-const curves = [
+const desktopCurves = [
   "M14 20 C 37 20, 56 35, 60 50",
   "M32 15 C 46 15, 56 32, 60 50",
   "M50 26 C 55 26, 56 38, 60 50",
@@ -61,6 +62,19 @@ const curves = [
   "M22 76 C 41 76, 56 63, 60 50",
   "M44 72 C 52 72, 56 61, 60 50",
   "M54 88 C 57 88, 56 69, 60 50",
+];
+
+const mobileCurves = [
+  "M20 11 C 31 21, 48 59, 50 78",
+  "M48 8 C 49 19, 50 58, 50 78",
+  "M78 14 C 68 24, 52 60, 50 78",
+  "M22 27 C 32 35, 48 64, 50 78",
+  "M52 26 C 51 34, 50 63, 50 78",
+  "M80 36 C 70 42, 52 66, 50 78",
+  "M18 43 C 29 48, 47 68, 50 78",
+  "M48 42 C 49 47, 50 68, 50 78",
+  "M76 52 C 67 56, 52 71, 50 78",
+  "M30 58 C 37 61, 48 72, 50 78",
 ];
 
 const GLIDE = 11000;
@@ -74,32 +88,36 @@ function progress(elapsed: number, index: number, hub: number, total: number) {
   return { dist: total, opacity: 1 - (t - 0.9) / 0.1 };
 }
 
+function measureHub(paths: SVGPathElement[]) {
+  return paths.map((path) => {
+    const probe = path.cloneNode() as SVGPathElement;
+    probe.setAttribute("d", path.dataset.curve ?? "");
+    return probe.getTotalLength();
+  });
+}
+
 export default function Bridge() {
-  const [paused, setPaused] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
-  const pausedRef = useRef(paused);
-  pausedRef.current = paused;
 
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
 
-    const paths = [...stage.querySelectorAll<SVGPathElement>("path.route")];
     const nodes = [...stage.querySelectorAll<HTMLElement>(".envelope")];
     const wide = window.matchMedia("(min-width: 721px)");
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const hubLengths = paths.map((path) => {
-      const probe = path.cloneNode() as SVGPathElement;
-      probe.setAttribute("d", path.dataset.curve ?? "");
-      return probe.getTotalLength();
-    });
 
-    const clear = () => {
-      nodes.forEach((node) => {
-        node.style.transform = "";
-        node.style.opacity = "";
-      });
+    const collect = () =>
+      [...stage.querySelectorAll<SVGPathElement>(wide.matches ? ".routes-wide path.route" : ".routes-compact path.route")];
+
+    let paths = collect();
+    let hubLengths = measureHub(paths);
+
+    const onBreakpoint = () => {
+      paths = collect();
+      hubLengths = measureHub(paths);
     };
+    wide.addEventListener("change", onBreakpoint);
 
     const place = (elapsed: number, atStart: boolean) => {
       const box = stage.getBoundingClientRect();
@@ -119,47 +137,36 @@ export default function Bridge() {
     };
 
     let frame = 0;
-    let origin = performance.now();
-    let pausedAt = 0;
-    let held = 0;
-
-    const stop = () => cancelAnimationFrame(frame);
+    const origin = performance.now();
 
     const loop = (now: number) => {
-      if (!wide.matches) {
-        clear();
-        frame = requestAnimationFrame(loop);
-        return;
-      }
-      if (reduced.matches) {
-        place(0, true);
-        frame = requestAnimationFrame(loop);
-        return;
-      }
-      if (pausedRef.current) {
-        if (!pausedAt) pausedAt = now;
-      } else {
-        if (pausedAt) {
-          held += now - pausedAt;
-          pausedAt = 0;
-        }
-        place(now - origin - held, false);
-      }
+      if (reduced.matches) place(0, true);
+      else place(now - origin, false);
       frame = requestAnimationFrame(loop);
     };
 
     frame = requestAnimationFrame(loop);
-    return () => stop();
+    return () => {
+      cancelAnimationFrame(frame);
+      wide.removeEventListener("change", onBreakpoint);
+    };
   }, []);
 
   return (
-    <figure className={paused ? "bridge is-paused" : "bridge"}>
+    <figure className="bridge">
       <div className="bridge-stage" ref={stageRef}>
         <div className="cluster-wash" aria-hidden="true" />
         <svg className="bridge-guides" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          {curves.map((curve) => (
-            <path className="route" key={curve} d={`${curve} H 86`} data-curve={curve} />
-          ))}
+          <g className="routes-wide">
+            {desktopCurves.map((curve) => (
+              <path className="route" key={curve} d={`${curve} H 86`} data-curve={curve} />
+            ))}
+          </g>
+          <g className="routes-compact">
+            {mobileCurves.map((curve) => (
+              <path className="route" key={curve} d={`${curve} V 92`} data-curve={curve} />
+            ))}
+          </g>
         </svg>
         <p className="cluster-label">Your ERPs</p>
         <ul className="erp-cluster">
@@ -171,16 +178,16 @@ export default function Bridge() {
           ))}
         </ul>
         <div className="hub">
-          <p className="bridge-kicker">The product</p>
-          <p className="bridge-name">Invoz</p>
+          <p className="bridge-kicker">The platform</p>
+          <Logo className="hub-logo" />
         </div>
         <div className="dest">
           <p className="bridge-kicker">Government RAMIS</p>
           <p className="bridge-name">e-Invoice system</p>
         </div>
         <div className="envelopes" aria-hidden="true">
-          {erps.map((name, index) => (
-            <span className="envelope" key={name} style={{ "--i": index } as CSSProperties}>
+          {erps.map((name) => (
+            <span className="envelope" key={name}>
               <svg viewBox="0 0 36 24" width="36" height="24">
                 <rect x="0.75" y="0.75" width="34.5" height="22.5" rx="3" fill="#fff" stroke="currentColor" />
                 <path d="M1.5 3.5 18 14.5 34.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
@@ -191,14 +198,6 @@ export default function Bridge() {
       </div>
       <figcaption className="bridge-caption">
         <p>Each ERP sends its e-invoice into Invoz. From there it clears in government RAMIS.</p>
-        <button
-          type="button"
-          className="bridge-control"
-          aria-pressed={paused}
-          onClick={() => setPaused((value) => !value)}
-        >
-          {paused ? "Play flow" : "Pause flow"}
-        </button>
       </figcaption>
     </figure>
   );

@@ -1,7 +1,7 @@
 import Icon from "@/components/Icon";
 
-export const contactPhone = "+94 70 232 9577";
-export const contactPhoneHref = "tel:+94702329577";
+export const contactPhone = "+94 74 188 0065";
+export const contactPhoneHref = "tel:+94741880065";
 export const contactAddress = "Rajagiriya";
 
 export default function ContactDetails({ className }: { className?: string }) {

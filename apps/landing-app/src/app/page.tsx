@@ -209,7 +209,7 @@ export default function LandingHome() {
         <section className="section" id="product" aria-labelledby="product-title">
           <div className="container">
             <header className="section-head">
-              <p className="section-label">Product</p>
+              <p className="section-label">The Platform</p>
               <h2 id="product-title">What Invoz holds.</h2>
             </header>
             <div className="features">
