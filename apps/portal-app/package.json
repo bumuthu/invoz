@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "npm run generate -w @invoz/database",
-    "build": "rm -rf .next && next build",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },
