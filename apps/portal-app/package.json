@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run generate -w @invoz/database",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"

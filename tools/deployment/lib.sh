@@ -248,10 +248,16 @@ print(f"lambda environment from {path}: {' '.join(sorted(variables))}")
 PY
 }
 
-# Prisma ships a query engine that esbuild cannot inline. Copy the generated client next to the bundle.
+# Prisma ships a query engine that esbuild cannot inline. Generate the client, then copy it next to the bundle.
+generate_prisma() {
+  echo "generating Prisma client"
+  (cd "$REPO_ROOT" && npm run generate -w @invoz/database)
+}
+
 pack_prisma() {
   local dest="$1"
   local root="$REPO_ROOT/node_modules"
+  generate_prisma
   if [[ ! -d "$root/@prisma/client" || ! -d "$root/.prisma/client" ]]; then
     echo "missing generated Prisma client. Run npm install from the repo root." >&2
     exit 1
