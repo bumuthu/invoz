@@ -4,6 +4,7 @@ import {
   classifyHost,
   hostnameFrom,
   organizationCookie,
+  portalRootDomain,
   readOrganizationCookie,
 } from "@/lib/host";
 import { sessionSupabase } from "@/lib/session";
@@ -24,7 +25,7 @@ export default async function LoginPage({
     data: { user },
   } = await session.auth.getUser();
   const remembered = readOrganizationCookie((await cookies()).get(organizationCookie)?.value) ?? "";
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? hostname;
+  const root = portalRootDomain(hostname);
 
   return (
     <LoginForm

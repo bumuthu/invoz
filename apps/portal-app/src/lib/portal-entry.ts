@@ -45,7 +45,7 @@ export async function openOrganization(
   }
 
   if (requireOrganizationHost()) {
-    return { ok: true, href: `${organizationOrigin(slug)}/` };
+    return { ok: true, href: `${organizationOrigin(slug, hostname)}/` };
   }
 
   const domain = authCookieDomain(hostname);

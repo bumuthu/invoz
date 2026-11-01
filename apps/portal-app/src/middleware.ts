@@ -19,7 +19,7 @@ export async function middleware(request: NextRequest) {
   request.headers.set("x-portal-search", request.nextUrl.search);
 
   const portalHost = classifyHost(hostname);
-  const canonical = defaultPortalHost();
+  const canonical = defaultPortalHost(hostname);
   if (requireOrganizationHost() && portalHost.kind === "default" && canonical && hostname !== canonical) {
     return NextResponse.redirect(new URL(loginPath, `https://${canonical}`));
   }

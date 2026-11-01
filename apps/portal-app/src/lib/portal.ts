@@ -21,6 +21,7 @@ import {
   serialCounterRow,
 } from "@invoz/database";
 import { permissions, resolveAccess } from "@/lib/access";
+import { portalRootDomain } from "@/lib/host";
 import {
   buildDocuments,
   buildGaps,
@@ -66,8 +67,8 @@ const loadContext = cache(async () => {
   const filters = access.filters;
   const organizationId = BigInt(access.organization.id);
   const flags = permissions(access.role);
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN;
   const requestHost = (await headers()).get("host")?.split(":")[0] ?? "";
+  const root = portalRootDomain(requestHost);
 
   const entityRecords = await prisma.legalEntity.findMany({
     where: { organization_id: organizationId },
