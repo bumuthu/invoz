@@ -1,3 +1,5 @@
+"use client";
+
 import Card from "@mui/material/Card";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -5,11 +7,19 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { loadPortal } from "@/lib/portal";
+import { fetchIngestion } from "@/lib/portal-actions";
 
-export default async function IngestionPage() {
-  const portal = await loadPortal();
+export default function IngestionPage() {
+  return (
+    <PageData load={fetchIngestion}>
+      {(portal) => <IngestionBody portal={portal} />}
+    </PageData>
+  );
+}
+
+function IngestionBody({ portal }: { portal: Awaited<ReturnType<typeof fetchIngestion>> }) {
   const counts = [
     ["Cleared", portal.pipeline.cleared],
     ["Queued", portal.pipeline.submitting],

@@ -1,4 +1,3 @@
-import type { OutboundAdjustmentRow, OutboundInvoiceRow } from "@invoz/common";
 import { monthKey, periodLabel } from "@/lib/filters";
 import type {
   DailyPoint,
@@ -99,9 +98,53 @@ function tagsFor(input: {
   return tags;
 }
 
+export type PortalInvoiceSource = {
+  id: number;
+  created_at: string;
+  serial_number: string | null;
+  customer_name: string;
+  customer_tin: string;
+  invoice_date: string;
+  supply_date: string;
+  amount_exclusive_vat: string;
+  vat_amount: string;
+  total_amount: string;
+  ramis_status: string;
+  branch_id: number;
+  legal_entity_id: number;
+  error_message: string | null;
+  ramis_clearance_token: string | null;
+  invoice_type: string;
+};
+
+export type PortalAdjustmentSource = {
+  id: number;
+  created_at: string;
+  serial_number: string | null;
+  adjustment_type: string;
+  customer_name: string | null;
+  customer_tin: string | null;
+  reason: string;
+  adjustment_date: string;
+  adjusted_amount_exclusive_vat: string;
+  adjusted_vat_amount: string;
+  adjusted_total_amount: string;
+  ramis_status: string;
+  branch_id: number;
+  legal_entity_id: number;
+  error_message: string | null;
+  ramis_clearance_token: string | null;
+  original_invoice_id: number;
+  original_serial_number: string;
+  original_invoice_date: string;
+  original_customer_name: string | null;
+  original_customer_tin: string | null;
+  original_invoice_type: string | null;
+};
+
 export function buildDocuments(input: {
-  invoices: OutboundInvoiceRow[];
-  adjustments: OutboundAdjustmentRow[];
+  invoices: PortalInvoiceSource[];
+  adjustments: PortalAdjustmentSource[];
   branchCode: Map<number, string>;
   branchName: Map<number, string>;
   entityName: Map<number, string>;
@@ -158,8 +201,8 @@ export function buildDocuments(input: {
     ...input.adjustments.map((row) => {
       const original = invoiceById.get(row.original_invoice_id);
       const credit = row.adjustment_type === "credit_note";
-      const buyer = row.customer_name ?? original?.customer_name ?? row.reason;
-      const buyerTin = row.customer_tin ?? original?.customer_tin ?? "";
+      const buyer = row.customer_name ?? original?.customer_name ?? row.original_customer_name ?? row.reason;
+      const buyerTin = row.customer_tin ?? original?.customer_tin ?? row.original_customer_tin ?? "";
       return {
         at: row.created_at,
         invoice: {
@@ -201,7 +244,7 @@ export function buildDocuments(input: {
             total: row.adjusted_total_amount,
             note: row.error_message ?? undefined,
           }),
-          invoiceClass: original?.invoice_type ?? "standard",
+          invoiceClass: original?.invoice_type ?? row.original_invoice_type ?? "standard",
           netValue: Number(row.adjusted_amount_exclusive_vat),
           vatValue: Number(row.adjusted_vat_amount),
           totalValue: Number(row.adjusted_total_amount),
@@ -251,10 +294,11 @@ export type ScopedDocument = Invoice & {
   month: string;
 };
 
-export function buildGaps(documents: ScopedDocument[]): GapRow[] {
+export function buildGapsFromSerials(serials: Array<string | null | undefined>): GapRow[] {
   const groups = new Map<string, Set<number>>();
-  for (const document of documents) {
-    const match = serialPattern.exec(document.serial);
+  for (const serial of serials) {
+    if (!serial) continue;
+    const match = serialPattern.exec(serial);
     if (!match) continue;
     const key = `${match[1]}|${match[2]}`;
     const sequences = groups.get(key) ?? new Set<number>();
@@ -282,6 +326,10 @@ export function buildGaps(documents: ScopedDocument[]): GapRow[] {
     .sort((left, right) => `${left.period}${left.branch}`.localeCompare(`${right.period}${right.branch}`));
 }
 
+export function buildGaps(documents: ScopedDocument[]): GapRow[] {
+  return buildGapsFromSerials(documents.map((document) => document.serial));
+}
+
 export function buildPipeline(documents: ScopedDocument[]): PipelineCounts {
   return {
     cleared: documents.filter((document) => document.status === "Cleared").length,
@@ -298,15 +346,60 @@ function dueOn(period: string): string {
   return `20 ${fullMonths[nextMonth - 1]} ${nextYear}`;
 }
 
+export function aggregateMetrics(input: {
+  period: string;
+  latestMonth: string;
+  salesVat: number;
+  salesTotal: number;
+  salesNetByClass: Array<{ invoiceClass: string; net: number }>;
+  clearedSalesByDay: Array<{ day: string; count: number }>;
+  creditVat: number;
+  creditTotal: number;
+  debitVat: number;
+  approvedInputVat: number;
+  unapprovedInputVat: number;
+  cleared: number;
+  submitting: number;
+  rejected: number;
+  skipped: number;
+  total: number;
+}): OverviewMetrics {
+  const activeMonth = input.period !== "all" ? input.period : input.latestMonth;
+  const adjustmentVat = input.creditVat - input.debitVat;
+  const net = input.salesVat - input.approvedInputVat - adjustmentVat;
+  const considered = input.total - input.skipped;
+  const ratio = input.salesTotal === 0 ? 0 : input.creditTotal / input.salesTotal;
+  const classSum = input.salesNetByClass.reduce((sum, row) => sum + row.net, 0);
+  const taxMix: TaxSlice[] = input.salesNetByClass.map((row) => ({
+    label: classLabel[row.invoiceClass] ?? row.invoiceClass,
+    amount: formatMoney(row.net),
+    share: classSum === 0 ? "0%" : `${Math.round((row.net / classSum) * 100)}%`,
+  }));
+  const dayCounts = new Map(input.clearedSalesByDay.map((row) => [row.day, row.count]));
+
+  return {
+    outputVat: formatMoney(input.salesVat),
+    inputVat: formatMoney(input.approvedInputVat),
+    adjustmentVat: formatMoney(adjustmentVat),
+    netVat: formatMoney(net),
+    clearanceRate: considered <= 0 ? "—" : `${((input.cleared / considered) * 100).toFixed(1)}%`,
+    inFlight: input.submitting,
+    rejected: input.rejected,
+    inputAtRisk: formatMoney(input.unapprovedInputVat),
+    creditNoteRatio: input.salesTotal === 0 ? "—" : `${(ratio * 100).toFixed(1)}%`,
+    creditNoteElevated: ratio > 0.05,
+    taxMix,
+    daily: dailyCounts(dayCounts, activeMonth),
+    dueLabel: activeMonth ? dueOn(activeMonth) : "the 20th of the following month",
+    seriesLabel: activeMonth ? periodLabel(activeMonth) : "this month",
+  };
+}
+
 export function buildMetrics(
   documents: ScopedDocument[],
   purchases: Array<ScheduleRow & { vatValue: number; approved: boolean; month: string }>,
   period: string,
 ): OverviewMetrics {
-  const activeMonth =
-    period !== "all"
-      ? period
-      : documents.reduce((latest, document) => (document.month > latest ? document.month : latest), "");
   const sales = documents.filter((document) => document.schedule === "01" && document.cleared);
   const credits = documents.filter(
     (document) => document.schedule === "04" && document.kind === "Credit note" && document.cleared,
@@ -314,58 +407,39 @@ export function buildMetrics(
   const debits = documents.filter(
     (document) => document.schedule === "04" && document.kind === "Debit note" && document.cleared,
   );
-  const outputVat = sales.reduce((sum, document) => sum + document.vatValue, 0);
-  const creditVat = credits.reduce((sum, document) => sum + document.vatValue, 0);
-  const debitVat = debits.reduce((sum, document) => sum + document.vatValue, 0);
-  const approved = purchases.filter((row) => row.approved);
-  const inputVat = approved.reduce((sum, row) => sum + row.vatValue, 0);
-  const adjustmentVat = creditVat - debitVat;
-  const net = outputVat - inputVat - adjustmentVat;
-  const considered = documents.filter((document) => document.status !== "Skipped");
-  const cleared = documents.filter((document) => document.status === "Cleared").length;
-  const salesTotal = sales.reduce((sum, document) => sum + document.totalValue, 0);
-  const creditTotal = credits.reduce((sum, document) => sum + document.totalValue, 0);
-  const ratio = salesTotal === 0 ? 0 : creditTotal / salesTotal;
   const classTotals = new Map<string, number>();
   for (const document of sales) {
-    const label = classLabel[document.invoiceClass] ?? document.invoiceClass;
-    classTotals.set(label, (classTotals.get(label) ?? 0) + document.netValue);
+    classTotals.set(document.invoiceClass, (classTotals.get(document.invoiceClass) ?? 0) + document.netValue);
   }
-  const classSum = [...classTotals.values()].reduce((sum, value) => sum + value, 0);
-  const taxMix: TaxSlice[] = [...classTotals.entries()].map(([label, amount]) => ({
-    label,
-    amount: formatMoney(amount),
-    share: classSum === 0 ? "0%" : `${Math.round((amount / classSum) * 100)}%`,
-  }));
-  const daily = dailySeries(sales, activeMonth);
+  const dayCounts = new Map<string, number>();
+  for (const document of sales) {
+    dayCounts.set(document.day, (dayCounts.get(document.day) ?? 0) + 1);
+  }
 
-  return {
-    outputVat: formatMoney(outputVat),
-    inputVat: formatMoney(inputVat),
-    adjustmentVat: formatMoney(adjustmentVat),
-    netVat: formatMoney(net),
-    clearanceRate: considered.length === 0 ? "—" : `${((cleared / considered.length) * 100).toFixed(1)}%`,
-    inFlight: documents.filter((document) => document.status === "Submitting").length,
+  return aggregateMetrics({
+    period,
+    latestMonth: documents.reduce((latest, document) => (document.month > latest ? document.month : latest), ""),
+    salesVat: sales.reduce((sum, document) => sum + document.vatValue, 0),
+    salesTotal: sales.reduce((sum, document) => sum + document.totalValue, 0),
+    salesNetByClass: [...classTotals.entries()].map(([invoiceClass, net]) => ({ invoiceClass, net })),
+    clearedSalesByDay: [...dayCounts.entries()].map(([day, count]) => ({ day, count })),
+    creditVat: credits.reduce((sum, document) => sum + document.vatValue, 0),
+    creditTotal: credits.reduce((sum, document) => sum + document.totalValue, 0),
+    debitVat: debits.reduce((sum, document) => sum + document.vatValue, 0),
+    approvedInputVat: purchases.filter((row) => row.approved).reduce((sum, row) => sum + row.vatValue, 0),
+    unapprovedInputVat: purchases.filter((row) => !row.approved).reduce((sum, row) => sum + row.vatValue, 0),
+    cleared: documents.filter((document) => document.status === "Cleared").length,
+    submitting: documents.filter((document) => document.status === "Submitting").length,
     rejected: documents.filter((document) => document.status === "Rejected").length,
-    inputAtRisk: formatMoney(purchases.filter((row) => !row.approved).reduce((sum, row) => sum + row.vatValue, 0)),
-    creditNoteRatio: salesTotal === 0 ? "—" : `${(ratio * 100).toFixed(1)}%`,
-    creditNoteElevated: ratio > 0.05,
-    taxMix,
-    daily,
-    dueLabel: activeMonth ? dueOn(activeMonth) : "the 20th of the following month",
-    seriesLabel: activeMonth ? periodLabel(activeMonth) : "this month",
-  };
+    skipped: documents.filter((document) => document.status === "Skipped").length,
+    total: documents.length,
+  });
 }
 
-function dailySeries(sales: ScopedDocument[], month: string): DailyPoint[] {
+function dailyCounts(counts: Map<string, number>, month: string): DailyPoint[] {
   if (!month) return [];
   const [year, monthNumber] = month.split("-").map(Number);
   const days = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
-  const counts = new Map<string, number>();
-  for (const document of sales) {
-    if (document.month !== month) continue;
-    counts.set(document.day, (counts.get(document.day) ?? 0) + 1);
-  }
   return Array.from({ length: days }, (_, index) => {
     const day = String(index + 1).padStart(2, "0");
     const key = `${month}-${day}`;

@@ -1,16 +1,22 @@
+"use client";
+
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { loadPortal } from "@/lib/portal";
+import { fetchBranches } from "@/lib/portal-actions";
 
-export default async function BranchesPage() {
-  const portal = await loadPortal();
-  const branches =
-    portal.filters.branch === "all"
-      ? portal.branches
-      : portal.branches.filter((branch) => branch.id === portal.filters.branch);
+export default function BranchesPage() {
+  return (
+    <PageData load={fetchBranches}>
+      {(portal) => <BranchesBody branches={portal.branches} />}
+    </PageData>
+  );
+}
+
+function BranchesBody({ branches }: { branches: Awaited<ReturnType<typeof fetchBranches>>["branches"] }) {
 
   return (
     <>

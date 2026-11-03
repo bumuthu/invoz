@@ -1,40 +1,13 @@
 import { Suspense } from "react";
 import AppLoading from "@/components/AppLoading";
-import AppShell from "@/components/AppShell";
-import { clearOrganization } from "@/lib/portal-entry";
-import { loadShell } from "@/lib/portal";
+import PortalGate from "@/components/PortalGate";
 
 export const dynamic = "force-dynamic";
 
-export default function PortalLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={<AppLoading />}>
-      <PortalFrame>{children}</PortalFrame>
+      <PortalGate>{children}</PortalGate>
     </Suspense>
-  );
-}
-
-async function PortalFrame({ children }: { children: React.ReactNode }) {
-  const shell = await loadShell();
-
-  return (
-    <AppShell
-      organization={shell.organization}
-      organizations={shell.organizations}
-      hostPinned={shell.hostPinned}
-      currentUser={shell.currentUser}
-      canAudit={shell.canAudit}
-      filters={shell.filters}
-      entities={shell.entities}
-      branches={shell.branches}
-      periods={shell.periods}
-      clearOrganization={clearOrganization}
-    >
-      {children}
-    </AppShell>
   );
 }

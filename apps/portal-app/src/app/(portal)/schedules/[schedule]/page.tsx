@@ -1,8 +1,11 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { notFound, useParams } from "next/navigation";
+import { useCallback } from "react";
+import PageData from "@/components/PageData";
+import { fetchScheduleDocuments, fetchSchedulePurchases } from "@/lib/portal-actions";
 import ScheduleView from "../../schedule-02/ScheduleView";
 import ScheduleDocuments from "./ScheduleDocuments";
-import { loadPortal } from "@/lib/portal";
-import type { Invoice } from "@/lib/types";
 
 const documents = {
   "01": {
@@ -19,22 +22,40 @@ const documents = {
   },
 } as const;
 
-export default async function SchedulePage({ params }: { params: Promise<{ schedule: string }> }) {
-  const { schedule } = await params;
-  const portal = await loadPortal();
-
-  if (schedule === "02") {
-    return (
-      <ScheduleView
-        rows={portal.scheduleRows}
-        organizationId={portal.organization.id}
-        canApprove={portal.canApprove}
-      />
-    );
-  }
-
+export default function SchedulePage() {
+  const { schedule } = useParams<{ schedule: string }>();
+  if (schedule === "02") return <Purchases />;
   if (schedule !== "01" && schedule !== "04" && schedule !== "07") notFound();
+  return <Documents schedule={schedule} />;
+}
+
+function Purchases() {
+  return (
+    <PageData load={fetchSchedulePurchases}>
+      {(portal) => (
+        <ScheduleView
+          rows={portal.scheduleRows}
+          organizationId={portal.organization.id}
+          canApprove={portal.canApprove}
+        />
+      )}
+    </PageData>
+  );
+}
+
+function Documents({ schedule }: { schedule: "01" | "04" | "07" }) {
+  const load = useCallback((search: string) => fetchScheduleDocuments(schedule, search), [schedule]);
   const page = documents[schedule];
-  const invoices = portal.invoices.filter((invoice: Invoice) => invoice.schedule === schedule);
-  return <ScheduleDocuments title={page.title} description={page.description} schedule={schedule} invoices={invoices} />;
+  return (
+    <PageData load={load}>
+      {(portal) => (
+        <ScheduleDocuments
+          title={page.title}
+          description={page.description}
+          schedule={schedule}
+          invoices={portal.invoices}
+        />
+      )}
+    </PageData>
+  );
 }

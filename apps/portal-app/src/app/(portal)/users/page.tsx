@@ -1,13 +1,15 @@
-import UsersView from "./UsersView";
-import { loadPortal } from "@/lib/portal";
+"use client";
 
-export default async function UsersPage() {
-  const portal = await loadPortal();
+import PageData from "@/components/PageData";
+import { fetchUsers } from "@/lib/portal-actions";
+import UsersView from "./UsersView";
+
+export default function UsersPage() {
   return (
-    <UsersView
-      users={portal.users}
-      organizationId={portal.organization.id}
-      canInvite={portal.canInvite}
-    />
+    <PageData load={fetchUsers}>
+      {(portal) => (
+        <UsersView users={portal.users} organizationId={portal.organization.id} canInvite={portal.canInvite} />
+      )}
+    </PageData>
   );
 }

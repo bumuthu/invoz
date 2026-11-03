@@ -1,13 +1,19 @@
-import MappingView from "./MappingView";
-import { loadPortal } from "@/lib/portal";
+"use client";
 
-export default async function MappingPage() {
-  const portal = await loadPortal();
+import PageData from "@/components/PageData";
+import { fetchMapping } from "@/lib/portal-actions";
+import MappingView from "./MappingView";
+
+export default function MappingPage() {
   return (
-    <MappingView
-      connection={portal.erpConnection}
-      rows={portal.scheduleMaps}
-      entitySelected={portal.filters.entityId !== "all"}
-    />
+    <PageData load={fetchMapping}>
+      {(portal) => (
+        <MappingView
+          connection={portal.erpConnection}
+          rows={portal.scheduleMaps}
+          entitySelected={portal.filters.entityId !== "all"}
+        />
+      )}
+    </PageData>
   );
 }

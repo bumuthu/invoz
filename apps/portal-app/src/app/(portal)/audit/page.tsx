@@ -1,3 +1,5 @@
+"use client";
+
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import Table from "@mui/material/Table";
@@ -7,11 +9,19 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
+import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { loadPortal } from "@/lib/portal";
+import { fetchAudit } from "@/lib/portal-actions";
 
-export default async function AuditPage() {
-  const portal = await loadPortal();
+export default function AuditPage() {
+  return (
+    <PageData load={fetchAudit}>
+      {(portal) => <AuditBody portal={portal} />}
+    </PageData>
+  );
+}
+
+function AuditBody({ portal }: { portal: Awaited<ReturnType<typeof fetchAudit>> }) {
   if (!portal.canAudit) {
     return (
       <PageHeader

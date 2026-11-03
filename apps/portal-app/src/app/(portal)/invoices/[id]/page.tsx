@@ -1,29 +1,24 @@
-import QRCode from "qrcode";
+"use client";
+
+import { useParams } from "next/navigation";
+import { useCallback } from "react";
+import PageData from "@/components/PageData";
+import { fetchInvoice } from "@/lib/portal-actions";
 import InvoiceDetail from "./InvoiceDetail";
-import { loadPortal } from "@/lib/portal";
 
-export default async function InvoicePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const portal = await loadPortal();
-  const invoice =
-    portal.invoices.find((item) => item.id === id) ??
-    portal.rejected.find((item) => item.id === id) ??
-    portal.recent.find((item) => item.id === id) ??
-    null;
-  const qr = invoice?.token
-    ? await QRCode.toString(`${invoice.serial}|${invoice.token}`, { type: "svg", margin: 1, width: 148 })
-    : null;
-
+export default function InvoicePage() {
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback((search: string) => fetchInvoice(id, search), [id]);
   return (
-    <InvoiceDetail
-      invoice={invoice}
-      qr={qr}
-      organizationId={portal.organization.id}
-      canRequeue={portal.canRequeue}
-    />
+    <PageData load={load}>
+      {(portal) => (
+        <InvoiceDetail
+          invoice={portal.invoice}
+          qr={portal.qr}
+          organizationId={portal.organization.id}
+          canRequeue={portal.canRequeue}
+        />
+      )}
+    </PageData>
   );
 }

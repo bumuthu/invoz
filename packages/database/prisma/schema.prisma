@@ -218,6 +218,7 @@ model OutboundInvoice {
   @@unique([legal_entity_id, erp_reference], map: "outbound_invoices_entity_erp_uidx")
   @@unique([legal_entity_id, ramis_payload_hash], map: "outbound_invoices_entity_hash_uidx")
   @@index([legal_entity_id, ramis_status, created_at(sort: Desc)], map: "outbound_invoices_entity_status_idx")
+  @@index([legal_entity_id, invoice_date], map: "outbound_invoices_entity_date_idx")
   @@map("outbound_invoices")
 }
 
@@ -254,6 +255,7 @@ model OutboundAdjustment {
 
   @@unique([legal_entity_id, erp_reference], map: "outbound_adjustments_entity_erp_uidx")
   @@unique([legal_entity_id, ramis_payload_hash], map: "outbound_adjustments_entity_hash_uidx")
+  @@index([legal_entity_id, adjustment_date], map: "outbound_adjustments_entity_date_idx")
   @@map("outbound_adjustments")
 }
 
@@ -291,6 +293,8 @@ model InboundInvoice {
   auditLogs    AuditLog[]
 
   @@unique([legal_entity_id, supplier_tin, supplier_invoice_number])
+  @@index([legal_entity_id, invoice_date], map: "inbound_invoices_entity_date_idx")
+  @@index([legal_entity_id, is_approved_for_input_vat], map: "inbound_invoices_entity_approval_idx")
   @@map("inbound_invoices")
 }
 

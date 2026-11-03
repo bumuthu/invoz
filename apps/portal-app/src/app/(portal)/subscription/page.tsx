@@ -1,15 +1,31 @@
+"use client";
+
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { loadPortal } from "@/lib/portal";
+import { fetchSubscription } from "@/lib/portal-actions";
 
 const count = new Intl.NumberFormat("en-US");
 
-export default async function SubscriptionPage() {
-  const { organization, usage } = await loadPortal();
+export default function SubscriptionPage() {
+  return (
+    <PageData load={fetchSubscription}>
+      {(portal) => <SubscriptionBody organization={portal.organization} usage={portal.usage} />}
+    </PageData>
+  );
+}
+
+function SubscriptionBody({
+  organization,
+  usage,
+}: {
+  organization: Awaited<ReturnType<typeof fetchSubscription>>["organization"];
+  usage: Awaited<ReturnType<typeof fetchSubscription>>["usage"];
+}) {
   const lines = [
     ["Plan", "Professional"],
     ["Allowance", `${count.format(organization.monthlyAllowance)} invoices / month`],

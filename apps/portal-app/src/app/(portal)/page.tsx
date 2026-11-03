@@ -1,3 +1,5 @@
+"use client";
+
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -6,11 +8,19 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import InvoiceTable from "@/components/InvoiceTable";
+import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { loadPortal } from "@/lib/portal";
+import { fetchOverview } from "@/lib/portal-actions";
 
-export default async function OverviewPage() {
-  const portal = await loadPortal();
+export default function OverviewPage() {
+  return (
+    <PageData load={fetchOverview}>
+      {(portal) => <OverviewBody portal={portal} />}
+    </PageData>
+  );
+}
+
+function OverviewBody({ portal }: { portal: Awaited<ReturnType<typeof fetchOverview>> }) {
   const { metrics, health, pipeline } = portal;
   const peak = Math.max(...metrics.daily.map((point) => point.count), 1);
   const cards = [

@@ -1,14 +1,24 @@
+"use client";
+
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
 import PrintButton from "@/components/PrintButton";
 import { describePeriod } from "@/lib/documents";
-import { loadPortal } from "@/lib/portal";
+import { fetchStatement } from "@/lib/portal-actions";
 
-export default async function StatementPage() {
-  const portal = await loadPortal();
+export default function StatementPage() {
+  return (
+    <PageData load={fetchStatement}>
+      {(portal) => <StatementBody portal={portal} />}
+    </PageData>
+  );
+}
+
+function StatementBody({ portal }: { portal: Awaited<ReturnType<typeof fetchStatement>> }) {
   const issued = new Date().toISOString().slice(0, 10);
   if (!portal.canAudit) {
     return (

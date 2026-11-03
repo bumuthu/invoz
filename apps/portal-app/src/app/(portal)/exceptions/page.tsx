@@ -1,13 +1,19 @@
-import ExceptionsView from "./ExceptionsView";
-import { loadPortal } from "@/lib/portal";
+"use client";
 
-export default async function ExceptionsPage() {
-  const portal = await loadPortal();
+import PageData from "@/components/PageData";
+import { fetchExceptions } from "@/lib/portal-actions";
+import ExceptionsView from "./ExceptionsView";
+
+export default function ExceptionsPage() {
   return (
-    <ExceptionsView
-      invoices={portal.rejected}
-      organizationId={portal.organization.id}
-      canRequeue={portal.canRequeue}
-    />
+    <PageData load={fetchExceptions}>
+      {(portal) => (
+        <ExceptionsView
+          invoices={portal.rejected}
+          organizationId={portal.organization.id}
+          canRequeue={portal.canRequeue}
+        />
+      )}
+    </PageData>
   );
 }

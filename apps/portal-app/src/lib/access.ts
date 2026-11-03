@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { portalRoles, type PortalRole } from "@invoz/common";
 import { membershipRow, organizationRow, prisma } from "@invoz/database";
 import { readFilters } from "@/lib/filters";
+import { portalSearch } from "@/lib/portal-search";
 import {
   classifyHost,
   hostnameFrom,
@@ -61,7 +62,8 @@ export const resolveAccess = cache(async (): Promise<Access> => {
     redirect("/auth/login");
   }
 
-  const search = (await headers()).get("x-portal-search") ?? "";
+  const stored = portalSearch();
+  const search = stored !== undefined ? stored : ((await headers()).get("x-portal-search") ?? "");
   const filters = readFilters(search);
   const slug = await requestedSlug();
   if (!slug) redirect("/auth/login");

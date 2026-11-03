@@ -1,4 +1,4 @@
-import { loadPortal } from "@/lib/portal";
+import { loadReturnPack } from "@/lib/portal";
 
 function cell(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replaceAll('"', '""')}"`;
@@ -10,7 +10,7 @@ function line(values: string[]): string {
 }
 
 export async function GET() {
-  const portal = await loadPortal();
+  const portal = await loadReturnPack();
   const header = ["schedule", "entity", "serial", "party", "tin", "date", "net", "vat", "total", "status"];
   const rows = [
     line(header),
