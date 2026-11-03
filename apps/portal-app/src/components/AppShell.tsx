@@ -33,10 +33,10 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { useState, type ReactNode } from "react";
 import PageSkeleton from "@/components/PageSkeleton";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FilterBar from "@/components/FilterBar";
 import Initials from "@/components/Initials";
 import Logo from "@/components/Logo";
+import { navigate, usePortalPath } from "@/lib/portal-nav";
 import { browserSupabase } from "@/lib/supabase-browser";
 import type { PortalData } from "@/lib/types";
 
@@ -112,9 +112,7 @@ function SidebarContent({
   onSelect: (href: string) => void;
   onNavigate?: () => void;
 }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const search = useSearchParams().toString();
+  const { pathname, search } = usePortalPath();
   const current = pendingHref ?? pathname;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
@@ -127,7 +125,7 @@ function SidebarContent({
           aria-label="Overview"
           onClick={() => {
             if (pathname !== "/") onSelect("/");
-            router.push("/");
+            navigate("/");
             onNavigate?.();
           }}
           sx={{
@@ -214,7 +212,7 @@ function SidebarContent({
                                 selected={childActive}
                                 onClick={() => {
                                   if (pathname !== child.href) onSelect(child.href);
-                                  router.push(search ? `${child.href}?${search}` : child.href);
+                                  navigate(search ? `${child.href}?${search}` : child.href);
                                   onNavigate?.();
                                 }}
                                 sx={{ ...itemSx(childActive), pl: 5.5 }}
@@ -239,7 +237,7 @@ function SidebarContent({
                     selected={active}
                     onClick={() => {
                       if (pathname !== item.href) onSelect(item.href);
-                      router.push(item.href === "/" ? "/" : search ? `${item.href}?${search}` : item.href);
+                      navigate(item.href === "/" ? "/" : search ? `${item.href}?${search}` : item.href);
                       onNavigate?.();
                     }}
                     sx={{ ...itemSx(active), pl: 1.25 }}
@@ -297,15 +295,13 @@ function AccountMenu({
   clearOrganization: () => Promise<void>;
   compact?: boolean;
 }) {
-  const router = useRouter();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
   async function signOut() {
     setAnchor(null);
     await clearOrganization();
     await browserSupabase().auth.signOut();
-    router.push("/auth/login");
-    router.refresh();
+    window.location.assign("/auth/login");
   }
 
   return (
@@ -434,8 +430,7 @@ export default function AppShell({
 }) {
   const [open, setOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const pathname = usePathname();
-  const router = useRouter();
+  const { pathname } = usePortalPath();
   const arrived = pendingHref !== null && pathname === pendingHref;
   if (arrived) setPendingHref(null);
   const route = arrived ? pathname : (pendingHref ?? pathname);
@@ -472,7 +467,7 @@ export default function AppShell({
             aria-label="Overview"
             onClick={() => {
               if (pathname !== "/") setPendingHref("/");
-              router.push("/");
+              navigate("/");
               setOpen(false);
             }}
             sx={{

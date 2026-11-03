@@ -8,8 +8,8 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import Link from "next/link";
 import CorrectDocument from "@/components/CorrectDocument";
+import { navigate, usePortalPath } from "@/lib/portal-nav";
 import PageHeader from "@/components/PageHeader";
 import StatusChip from "@/components/StatusChip";
 import type { Invoice } from "@/lib/types";
@@ -25,6 +25,8 @@ export default function InvoiceDetail({
   organizationId: string;
   canRequeue: boolean;
 }) {
+  const { search } = usePortalPath();
+  const query = search ? `?${search}` : "";
   if (!invoice) {
     return (
       <PageHeader title="Invoice not found" description="This document is not in the current view." />
@@ -110,9 +112,12 @@ export default function InvoiceDetail({
               <CorrectDocument invoice={invoice} organizationId={organizationId} />
             ) : (
               <Button
-                component={Link}
-                href={invoice.schedule === "04" ? "/schedules/04" : invoice.schedule === "07" ? "/schedules/07" : "/schedules/01"}
                 sx={{ mt: 2.5 }}
+                onClick={() =>
+                  navigate(
+                    `${invoice.schedule === "04" ? "/schedules/04" : invoice.schedule === "07" ? "/schedules/07" : "/schedules/01"}${query}`,
+                  )
+                }
               >
                 Back to schedule
               </Button>

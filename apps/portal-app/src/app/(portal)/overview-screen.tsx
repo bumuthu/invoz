@@ -6,7 +6,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import Link from "next/link";
 import InvoiceTable from "@/components/InvoiceTable";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
@@ -52,7 +51,7 @@ function OverviewBody({ portal }: { portal: Awaited<ReturnType<typeof fetchOverv
         title="Overview"
         description={`${portal.organization.name} · cleared output VAT, approved input VAT, and Schedule 04 adjustments.`}
         action={
-          <Button component={Link} href={`/export/return-pack${portal.query}`} variant="contained">
+          <Button component="a" href={`/export/return-pack${portal.query}`} variant="contained">
             Download return pack
           </Button>
         }

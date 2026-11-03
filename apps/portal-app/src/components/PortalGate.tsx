@@ -3,17 +3,18 @@
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { unstable_rethrow, useSearchParams } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import AppLoading from "@/components/AppLoading";
 import AppShell from "@/components/AppShell";
 import Logo from "@/components/Logo";
 import { clearOrganization, fetchShell, onPortalReload } from "@/lib/portal-client";
+import { usePortalPath } from "@/lib/portal-nav";
 
 type Shell = Awaited<ReturnType<typeof fetchShell>>;
 
 export default function PortalGate({ children }: { children: ReactNode }) {
-  const search = useSearchParams().toString();
+  const { search } = usePortalPath();
   const [shell, setShell] = useState<Shell | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);

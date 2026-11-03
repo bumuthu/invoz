@@ -1,6 +1,6 @@
 "use client";
 
-import { notFound, useParams } from "next/navigation";
+import Typography from "@mui/material/Typography";
 import { useCallback } from "react";
 import PageData from "@/components/PageData";
 import { fetchScheduleDocuments, fetchSchedulePurchases } from "@/lib/portal-client";
@@ -22,10 +22,15 @@ const documents = {
   },
 } as const;
 
-export default function SchedulePage() {
-  const { schedule } = useParams<{ schedule: string }>();
+export default function SchedulePage({ schedule }: { schedule: string }) {
   if (schedule === "02") return <Purchases />;
-  if (schedule !== "01" && schedule !== "04" && schedule !== "07") notFound();
+  if (schedule !== "01" && schedule !== "04" && schedule !== "07") {
+    return (
+      <Typography color="text.secondary" role="alert">
+        This schedule does not exist.
+      </Typography>
+    );
+  }
   return <Documents schedule={schedule} />;
 }
 

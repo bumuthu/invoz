@@ -9,12 +9,14 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import Link from "@mui/material/Link";
-import NextLink from "next/link";
 import Initials from "@/components/Initials";
 import StatusChip from "@/components/StatusChip";
+import { navigate, usePortalPath } from "@/lib/portal-nav";
 import type { Invoice } from "@/lib/types";
 
 export default function InvoiceTable({ rows }: { rows: Invoice[] }) {
+  const { search } = usePortalPath();
+  const query = search ? `?${search}` : "";
   return (
     <Box sx={{ overflowX: "auto" }}>
       <Table>
@@ -32,11 +34,15 @@ export default function InvoiceTable({ rows }: { rows: Invoice[] }) {
             <TableRow key={invoice.id} hover>
               <TableCell>
                 <Link
-                  component={NextLink}
-                  href={`/invoices/${invoice.id}`}
+                  href={`/invoices/${invoice.id}${query}`}
                   underline="hover"
                   color="primary"
                   sx={{ fontWeight: 600 }}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                    event.preventDefault();
+                    navigate(`/invoices/${invoice.id}${query}`);
+                  }}
                 >
                   {invoice.serial}
                 </Link>

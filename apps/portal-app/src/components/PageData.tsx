@@ -1,10 +1,11 @@
 "use client";
 
 import Typography from "@mui/material/Typography";
-import { unstable_rethrow, useSearchParams } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import PageSkeleton from "@/components/PageSkeleton";
 import { onPortalReload } from "@/lib/portal-client";
+import { usePortalPath } from "@/lib/portal-nav";
 
 export default function PageData<T>({
   load,
@@ -13,7 +14,7 @@ export default function PageData<T>({
   load: (search: string) => Promise<T>;
   children: (data: T) => ReactNode;
 }) {
-  const search = useSearchParams().toString();
+  const { search } = usePortalPath();
   const [data, setData] = useState<T | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);

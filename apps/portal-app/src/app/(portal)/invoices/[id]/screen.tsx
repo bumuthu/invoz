@@ -1,13 +1,11 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { useCallback } from "react";
 import PageData from "@/components/PageData";
 import { fetchInvoice } from "@/lib/portal-client";
 import InvoiceDetail from "./InvoiceDetail";
 
-export default function InvoicePage() {
-  const { id } = useParams<{ id: string }>();
+export default function InvoicePage({ id }: { id: string }) {
   const load = useCallback((search: string) => fetchInvoice(id, search), [id]);
   return (
     <PageData load={load}>

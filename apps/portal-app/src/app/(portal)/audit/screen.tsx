@@ -8,10 +8,10 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import Link from "next/link";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
 import { fetchAudit } from "@/lib/portal-client";
+import { navigate } from "@/lib/portal-nav";
 
 export default function AuditPage() {
   return (
@@ -37,7 +37,7 @@ function AuditBody({ portal }: { portal: Awaited<ReturnType<typeof fetchAudit>> 
         title="Audit"
         description="Gazette serials in this view, and the latest audit events."
         action={
-          <Button component={Link} href={`/audit/statement${portal.query}`} variant="outlined">
+          <Button variant="outlined" onClick={() => navigate(`/audit/statement${portal.query}`)}>
             Continuity statement
           </Button>
         }

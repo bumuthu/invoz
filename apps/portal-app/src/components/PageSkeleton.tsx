@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import { usePathname } from "next/navigation";
+import { usePortalPath } from "@/lib/portal-nav";
 
 function Bone({
   width,
@@ -281,7 +281,7 @@ export function skeletonKind(pathname: string) {
 }
 
 export default function PageSkeleton({ route }: { route?: string }) {
-  const pathname = usePathname();
+  const { pathname } = usePortalPath();
   const kind = skeletonKind(route ?? pathname);
 
   return (

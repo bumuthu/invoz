@@ -4,9 +4,9 @@ import Divider from "@mui/material/Divider";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { periodLabel, readFilters } from "@/lib/filters";
+import { navigate, usePortalPath } from "@/lib/portal-nav";
 import type { BranchView, EntityOption, OrganizationOption, PortalFilters } from "@/lib/types";
 
 const fieldSx = {
@@ -66,9 +66,8 @@ export default function FilterBar({
   showOrganization: boolean;
   account?: ReactNode;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const filters = readFilters(useSearchParams().toString());
+  const { pathname, search } = usePortalPath();
+  const filters = readFilters(search);
   const branchOptions =
     filters.entityId === "all" ? branches : branches.filter((branch) => branch.entityId === filters.entityId);
   const branchValue = branchOptions.some((branch) => branch.id === filters.branch) ? filters.branch : "all";
@@ -84,7 +83,7 @@ export default function FilterBar({
     if (branch !== "all") params.set("branch", branch);
     if (period !== "all") params.set("period", period);
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname);
+    navigate(query ? `${pathname}?${query}` : pathname);
   }
 
   return (

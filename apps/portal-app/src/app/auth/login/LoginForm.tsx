@@ -8,7 +8,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { isOrganizationSlug } from "@invoz/common";
 import AppLoading from "@/components/AppLoading";
 import Logo from "@/components/Logo";
@@ -16,7 +16,6 @@ import { clearOrganization, fetchLoginContext, openOrganization, type LoginConte
 import { browserSupabase } from "@/lib/supabase-browser";
 
 export default function LoginForm() {
-  const router = useRouter();
   const error = useSearchParams().get("error") ?? undefined;
   const [context, setContext] = useState<LoginContext | null>(null);
   const [contextError, setContextError] = useState("");
@@ -102,12 +101,7 @@ export default function LoginForm() {
                 setMessage(opened.error);
                 return;
               }
-              if (opened.href.startsWith("http")) {
-                window.location.assign(opened.href);
-                return;
-              }
-              router.push(opened.href);
-              router.refresh();
+              window.location.assign(opened.href);
             }}
           >
             {error === "membership" ? (
@@ -168,7 +162,7 @@ export default function LoginForm() {
                 await clearOrganization();
                 await browserSupabase().auth.signOut();
                 setUseAnotherAccount(true);
-                router.refresh();
+                setContext((current) => (current ? { ...current, signedInEmail: "" } : current));
               }}
             >
               Use a different account
