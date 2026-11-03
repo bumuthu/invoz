@@ -31,6 +31,7 @@ export function permissions(role: PortalRole) {
     canApprove: role === "owner" || role === "admin" || role === "manager",
     canRequeue: role === "owner" || role === "admin" || role === "manager" || role === "staff",
     canMap: role === "owner" || role === "admin",
+    canInvite: role === "owner" || role === "admin",
     canAudit: role !== "staff",
   };
 }

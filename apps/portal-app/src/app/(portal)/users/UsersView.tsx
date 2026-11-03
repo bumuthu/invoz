@@ -1,5 +1,6 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -11,67 +12,101 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { portalRoleLabel, portalRoles, type PortalRole } from "@invoz/common";
 import Initials from "@/components/Initials";
 import PageHeader from "@/components/PageHeader";
+import { inviteMember } from "@/lib/actions";
 import type { PortalUser } from "@/lib/types";
 
 const roles = portalRoles.filter((item) => item !== "owner");
 
-export default function UsersView({ users }: { users: PortalUser[] }) {
-  const [rows, setRows] = useState(users);
+export default function UsersView({
+  users,
+  organizationId,
+  canInvite,
+}: {
+  users: PortalUser[];
+  organizationId: string;
+  canInvite: boolean;
+}) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<PortalRole>("viewer");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string; link?: string } | null>(null);
 
   return (
     <>
       <PageHeader
         title="Users"
-        description="The owner invites people onto this organization. The role sets what they can do across every legal entity and branch."
+        description="The owner or an admin invites people onto this organization. The role sets what they can do across every legal entity and branch."
       />
-      <Card sx={{ mb: 2 }}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={1.5}
-          sx={{ p: 2, alignItems: { md: "center" } }}
-        >
-          <TextField
-            label="Email"
-            size="small"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            sx={{ flex: 1 }}
-          />
-          <TextField
-            select
-            label="Role"
-            size="small"
-            value={role}
-            onChange={(event) => setRole(event.target.value as PortalRole)}
-            sx={{ minWidth: 160 }}
+      {message ? (
+        <Alert severity={message.tone} sx={{ mb: 2 }}>
+          {message.text}
+          {message.link ? (
+            <Typography variant="body2" sx={{ mt: 1, wordBreak: "break-all" }}>
+              {message.link}
+            </Typography>
+          ) : null}
+        </Alert>
+      ) : null}
+      {canInvite ? (
+        <Card sx={{ mb: 2 }}>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={1.5}
+            sx={{ p: 2, alignItems: { md: "center" } }}
           >
-            {roles.map((item) => (
-              <MenuItem key={item} value={item}>
-                {portalRoleLabel(item)}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Button
-            variant="contained"
-            onClick={() => {
-              if (!email.trim()) return;
-              setRows((current) => [
-                ...current,
-                { name: email.split("@")[0], email, role },
-              ]);
-              setEmail("");
-            }}
-          >
-            Invite
-          </Button>
-        </Stack>
-      </Card>
+            <TextField
+              label="Email"
+              size="small"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              select
+              label="Role"
+              size="small"
+              value={role}
+              onChange={(event) => setRole(event.target.value as PortalRole)}
+              sx={{ minWidth: 160 }}
+            >
+              {roles.map((item) => (
+                <MenuItem key={item} value={item}>
+                  {portalRoleLabel(item)}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              variant="contained"
+              disabled={pending || email.trim() === ""}
+              onClick={async () => {
+                setPending(true);
+                const result = await inviteMember(organizationId, email, role);
+                setPending(false);
+                if (!result.ok) {
+                  setMessage({ tone: "error", text: result.error });
+                  return;
+                }
+                setEmail("");
+                setMessage({ tone: "success", text: result.message, link: result.inviteUrl });
+                router.refresh();
+              }}
+            >
+              Invite
+            </Button>
+          </Stack>
+        </Card>
+      ) : (
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Only the owner or an admin can invite people.
+        </Typography>
+      )}
       <Card>
         <Table>
           <TableHead>
@@ -82,7 +117,7 @@ export default function UsersView({ users }: { users: PortalUser[] }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((user) => (
+            {users.map((user) => (
               <TableRow key={user.email} hover>
                 <TableCell>
                   <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>

@@ -121,7 +121,26 @@ function SidebarContent({
   return (
     <Stack sx={{ height: "100%" }}>
       <Box sx={{ px: 2.5, pt: 2.75, pb: 1.5 }}>
-        <Logo height={32} />
+        <Box
+          component="button"
+          type="button"
+          aria-label="Overview"
+          onClick={() => {
+            if (pathname !== "/") onSelect("/");
+            router.push("/");
+            onNavigate?.();
+          }}
+          sx={{
+            p: 0,
+            border: 0,
+            bgcolor: "transparent",
+            display: "inline-flex",
+            cursor: "pointer",
+            "& img": { cursor: "pointer" },
+          }}
+        >
+          <Logo height={32} />
+        </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
           {organization.name}
         </Typography>
@@ -156,10 +175,10 @@ function SidebarContent({
                   borderRadius: 2,
                   py: 0.9,
                   borderLeft: "3px solid",
-                  borderColor: selected ? "secondary.main" : "transparent",
-                  color: selected ? "text.primary" : "text.secondary",
+                  borderColor: selected ? "primary.main" : "transparent",
+                  color: selected ? "primary.main" : "text.secondary",
                   "&:hover": { bgcolor: "action.hover" },
-                  "&.Mui-selected": { bgcolor: "action.hover", color: "text.primary" },
+                  "&.Mui-selected": { bgcolor: "action.hover", color: "primary.main" },
                   "&.Mui-selected:hover": { bgcolor: "action.hover" },
                 });
                 if (item.children) {
@@ -220,7 +239,7 @@ function SidebarContent({
                     selected={active}
                     onClick={() => {
                       if (pathname !== item.href) onSelect(item.href);
-                      router.push(search ? `${item.href}?${search}` : item.href);
+                      router.push(item.href === "/" ? "/" : search ? `${item.href}?${search}` : item.href);
                       onNavigate?.();
                     }}
                     sx={{ ...itemSx(active), pl: 1.25 }}
@@ -416,6 +435,7 @@ export default function AppShell({
   const [open, setOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const arrived = pendingHref !== null && pathname === pendingHref;
   if (arrived) setPendingHref(null);
   const route = arrived ? pathname : (pendingHref ?? pathname);
@@ -446,7 +466,26 @@ export default function AppShell({
           <IconButton edge="start" onClick={() => setOpen(true)} aria-label="Open navigation">
             <MenuIcon />
           </IconButton>
-          <Box sx={{ ml: 1, flex: 1 }}>
+          <Box
+            component="button"
+            type="button"
+            aria-label="Overview"
+            onClick={() => {
+              if (pathname !== "/") setPendingHref("/");
+              router.push("/");
+              setOpen(false);
+            }}
+            sx={{
+              ml: 1,
+              flex: 1,
+              p: 0,
+              border: 0,
+              bgcolor: "transparent",
+              cursor: "pointer",
+              textAlign: "left",
+              "& img": { cursor: "pointer" },
+            }}
+          >
             <Logo height={28} />
           </Box>
           <AccountMenu

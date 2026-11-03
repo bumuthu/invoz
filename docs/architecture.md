@@ -43,7 +43,7 @@ flowchart LR
 
 | Tier | Service | Role |
 | --- | --- | --- |
-| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user is chrooted to `uploads/{organization_id}/` in the shared bucket. The ERP writes `/{legal_entity_id}/{branch_id}/inbound/`. |
+| SFTP ingestion | AWS Transfer Family | Managed SFTP. Each organization user signs in with a password and is chrooted to `uploads/{organization_id}/` in the shared bucket. The ERP writes `/{legal_entity_id}/{branch_id}/inbound/`. |
 | Storage | Amazon S3 | One bucket, `invoz-{env}-invoices`. `{env}` is `APP_ENV`: `stag` or `prod`. Each organization is the prefix `uploads/{organization_id}/`. Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
 | Routing | Amazon EventBridge | Forwards a created-object event into the FIFO queue. |
 | Sequencing | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
@@ -128,11 +128,13 @@ Supabase holds operational state and serves the apps. It does not receive ERP fi
 | `seeders/` | JSON seed objects exported from `seeders/index.ts`. |
 | `scripts/migrate.ts` | Applies `migrations` and records each file in `schema_migrations`. |
 | `scripts/seed.ts` | Inserts every seed object through Prisma, using `tableColumns` from `@invoz/common`. Auth users are still created with the Supabase Auth admin API. |
+| `scripts/write-onboarding.ts` | Writes one organization JSON file under `onboarding/`. |
+| `scripts/onboard.ts` | Creates that organization, its legal entities, branches, and owner account. |
 | `er-diagram.md` | Entity diagram for the migration. |
 
 The Lambda handler is `handler` in `@invoz/invoice-engine`. There is no Supabase Edge Function and no database queue.
 
-Row-Level Security is enabled on every table, and `anon` and `authenticated` have no grants. Portal and worker queries go through Prisma on the direct Postgres connection. Sign-in uses the publishable key, which cannot read tables. The service role is used for Auth admin: creating seed users and listing portal accounts.
+Row-Level Security is enabled on every table, and `anon` and `authenticated` have no grants. Portal and worker queries go through Prisma on the direct Postgres connection. Sign-in uses the publishable key, which cannot read tables. The service role is used for Auth admin: creating seed users, onboarding the owner, inviting members, and listing portal accounts.
 
 Tables:
 
@@ -201,6 +203,25 @@ invoz
 
 An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source` (`s3` or `webhook`). An upload from the invoice uploader and an upload from SFTP are the same object: `uploads/{organizationId}/{legalEntityId}/{branchId}/inbound/{file}.csv`. The queue message carries `bucket` and `objectKey`. The worker reads the organization, legal entity, and branch from that key. The branch code in the file must match that branch. Webhook jobs include `payload`.
 
+## Onboarding
+
+A new organization starts as a JSON file. The apply script creates the database rows and the owner account. The owner then invites everyone else from Users. SFTP is a separate step and uses the organization id from the result file.
+
+```bash
+npm run onboard:json -- \
+  --name "Acme (Pvt) Ltd" \
+  --slug acme \
+  --owner-name "Ayesha Fernando" \
+  --owner-email owner@acme.lk \
+  --tin 102345678 \
+  --branch "HO|Head office"
+
+npm run onboard -- supabase/onboarding/acme.json
+npm run onboard:sftp -- --from supabase/onboarding/acme.result.json
+```
+
+`npm run onboard` prints the owner password once and writes `acme.result.json`. That file is gitignored. Run the same onboard file again to add a legal entity or branch that was missing. It does not replace an existing owner password. `npm run onboard:sftp -- --rotate` replaces the SFTP password.
+
 ## Commands
 
 | Command | Runs |
@@ -212,6 +233,9 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 | `npm run migrate` | `supabase/scripts/migrate.ts` |
 | `npm run migrate:ramis` | `tools/ramis-engine/scripts/migrate.ts` |
 | `npm run seed` | `supabase/scripts/seed.ts` |
+| `npm run onboard:json` | Writes `supabase/onboarding/<slug>.json` |
+| `npm run onboard` | Creates the organization and owner from that file |
+| `npm run onboard:sftp` | SFTP password for `uploads/{organization_id}/` |
 | `npm run dev:ramis` | RAMIS engine on port 8090 |
 | `npm run test:ramis` | RAMIS engine tests |
 | `npm run provision` | `tools/deployment/provision.sh` |

@@ -4,9 +4,9 @@ import Divider from "@mui/material/Divider";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { periodLabel } from "@/lib/filters";
+import { periodLabel, readFilters } from "@/lib/filters";
 import type { BranchView, EntityOption, OrganizationOption, PortalFilters } from "@/lib/types";
 
 const fieldSx = {
@@ -49,7 +49,6 @@ const selectSlotProps = {
 };
 
 export default function FilterBar({
-  filters,
   entities,
   branches,
   periods,
@@ -69,6 +68,7 @@ export default function FilterBar({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const filters = readFilters(useSearchParams().toString());
   const branchOptions =
     filters.entityId === "all" ? branches : branches.filter((branch) => branch.entityId === filters.entityId);
   const branchValue = branchOptions.some((branch) => branch.id === filters.branch) ? filters.branch : "all";

@@ -187,6 +187,7 @@ export type PortalData = {
   canApprove: boolean;
   canRequeue: boolean;
   canMap: boolean;
+  canInvite: boolean;
   canAudit: boolean;
   users: PortalUser[];
   usage: {

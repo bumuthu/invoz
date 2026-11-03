@@ -1,12 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { portalRoles, type PortalRole } from "@invoz/common";
 import { prisma } from "@invoz/database";
 import { enqueueResubmit } from "@/lib/queue";
 import { permissions, resolveAccess } from "@/lib/access";
 import { isErpCode } from "@/lib/erps";
+import { hostnameFrom, isLocalHost, organizationOrigin } from "@/lib/host";
+import { supabase } from "@/lib/supabase";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
+
+export type InviteResult =
+  | { ok: true; message: string; inviteUrl?: string }
+  | { ok: false; error: string };
+
+const inviteRoles = portalRoles.filter((role) => role !== "owner");
 
 const approvalLimit = 5000;
 
@@ -93,6 +103,92 @@ export async function connectErp(organizationId: string, entityId: string, erpCo
   });
   revalidatePath("/", "layout");
   return { ok: true, message: "ERP connected for this legal entity." };
+}
+
+export async function inviteMember(organizationId: string, emailInput: string, role: PortalRole): Promise<InviteResult> {
+  const email = emailInput.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  if (!(inviteRoles as readonly string[]).includes(role)) {
+    return { ok: false, error: "Choose a role other than owner." };
+  }
+  const { access, error } = await authorize(organizationId);
+  if (!access) return { ok: false, error };
+  if (!permissions(access.role).canInvite) {
+    return { ok: false, error: "Your role cannot invite people." };
+  }
+
+  const organization = BigInt(organizationId);
+  let userId = await authUserId(email);
+  let inviteUrl: string | undefined;
+  if (!userId) {
+    const headerList = await headers();
+    const hostHeader = headerList.get("host") ?? "";
+    const hostname = hostnameFrom(headerList.get("x-portal-host") ?? hostHeader);
+    const redirectTo = isLocalHost(hostname)
+      ? `http://${hostHeader}/auth/login`
+      : `${organizationOrigin(access.organization.slug, hostname)}/auth/login`;
+    const invited = await supabase().auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: {
+        data: { name: email.split("@")[0] },
+        redirectTo,
+      },
+    });
+    if (invited.error || !invited.data.user) {
+      const raced = await authUserId(email);
+      if (!raced) {
+        return { ok: false, error: invited.error?.message ?? "The invite could not be created." };
+      }
+      userId = raced;
+    } else {
+      userId = invited.data.user.id;
+      inviteUrl = invited.data.properties.action_link;
+    }
+  }
+
+  const membership = await prisma.membership.findUnique({
+    where: { user_id_organization_id: { user_id: userId, organization_id: organization } },
+  });
+  if (membership) return { ok: false, error: "That person is already in this organization." };
+
+  try {
+    await prisma.membership.create({
+      data: { user_id: userId, organization_id: organization, role },
+    });
+  } catch (caught) {
+    if (isUnique(caught)) return { ok: false, error: "That person is already in this organization." };
+    throw caught;
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      organization_id: organization,
+      event: "member.invited",
+      detail: { email, role },
+    },
+  });
+  revalidatePath("/", "layout");
+  return {
+    ok: true,
+    message: inviteUrl
+      ? `Invite created for ${email}. Send them this link so they can set a password.`
+      : `${email} can sign in and open this organization.`,
+    inviteUrl,
+  };
+}
+
+async function authUserId(email: string): Promise<string | undefined> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    select id from auth.users where lower(email) = ${email}
+  `;
+  return rows[0]?.id;
+}
+
+function isUnique(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }
 
 export type DocumentCorrection = {

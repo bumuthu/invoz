@@ -2,7 +2,7 @@
 
 Run these from the repo root, in order. The default region is `ap-south-1`.
 
-S3, SQS, the invoice-engine Lambda, EventBridge, and the two HTTP APIs come from `tools/deployment`. SFTP does not. Transfer Family is created with the AWS CLI after the bucket exists. The invoice-engine Lambda has no API Gateway. SQS invokes it. API Gateway sits in front of the RAMIS and landing Lambdas only.
+S3, SQS, the invoice-engine Lambda, EventBridge, and the two HTTP APIs come from `tools/deployment`. SFTP is separate: `npm run onboard:sftp` creates the Transfer server and one password per organization after the bucket exists. The invoice-engine Lambda has no API Gateway. SQS invokes it. API Gateway sits in front of the RAMIS and landing Lambdas only.
 
 `APP_ENV` is `stag` or `prod`. Every AWS name is `invoz-{APP_ENV}-{resource}`:
 
@@ -18,6 +18,7 @@ S3, SQS, the invoice-engine Lambda, EventBridge, and the two HTTP APIs come from
 | RAMIS hostname | `stag-ramis.api.invoz.lk`, or `ramis.api.invoz.lk` on prod |
 | Landing hostname | `stag-landing.api.invoz.lk`, or `landing.api.invoz.lk` on prod |
 | Transfer Family role | `invoz-{env}-transfer` |
+| SFTP identity Lambda | `invoz-{env}-sftp-idp` |
 
 `npm run provision` runs S3, SQS, Lambda, and EventBridge in one shot. Use the steps below when you want to create one resource at a time. EventBridge has no script of its own. The full `npm run provision` command is what attaches it, and that command is safe to repeat.
 
@@ -93,120 +94,26 @@ Keys ending in `.csv.tmp` do not match the EventBridge rule. The rule matches th
 
 ## 2. SFTP
 
-There is no Transfer Family script in this repo. Create one public SFTP server. Add one user per organization, chrooted to that organization's prefix in the shared bucket. The server is billed for every hour it exists, plus the data uploaded. `ORGANIZATION_ID` is the id from `organizations.id`.
+One public SFTP server per environment. One password per organization, chrooted to `uploads/{organization id}/` in the shared bucket. The server is billed for every hour it exists, plus the data uploaded. The first run creates the Transfer server, the identity-provider Lambda, and the IAM role. Later runs add another organization.
+
+`ORGANIZATION_ID` is `organizations.id` from `npm run onboard`. The username is that id. The password is printed once and, when you pass `--from`, stored in the onboarding result file. Secrets Manager keeps only a hash.
 
 ```bash
-BUCKET="invoz-${APP_ENV}-invoices"
+npm run onboard:sftp -- 101
 ```
 
-Create a role Transfer Family can assume. `create-role` and `create-server` fail if that role or server already exists. The npm steps above can be repeated.
+Or point at the result file:
 
 ```bash
-cat > /tmp/transfer-trust.json <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": { "Service": "transfer.amazonaws.com" },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
-
-aws iam create-role \
-  --role-name invoz-${APP_ENV}-transfer \
-  --assume-role-policy-document file:///tmp/transfer-trust.json
-
-cat > /tmp/transfer-s3.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
-      "Resource": "arn:aws:s3:::${BUCKET}"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:GetObjectVersion"],
-      "Resource": "arn:aws:s3:::${BUCKET}/*"
-    }
-  ]
-}
-EOF
-
-aws iam put-role-policy \
-  --role-name invoz-${APP_ENV}-transfer \
-  --policy-name invoz-${APP_ENV}-transfer-s3 \
-  --policy-document file:///tmp/transfer-s3.json
+npm run onboard:sftp -- --from supabase/onboarding/acme.result.json
 ```
 
-Create the server once. Create one ERP user per organization. Replace `erp-public-key.pub` with that organization's SSH public key. The home directory maps `/` to `uploads/{organization_id}/`, and the session policy limits the user to that prefix. An upload of `/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv` is stored as `uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv`.
+Replace an existing password with `--rotate`. The script loads `tools/deployment/.env` when `APP_ENV` is not already set.
+
+An upload of `/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv` is stored as `uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/invoice_001.csv`. Connect with the printed host, username, and password:
 
 ```bash
-SERVER_ID=$(aws transfer create-server \
-  --region "$AWS_REGION" \
-  --identity-provider-type SERVICE_MANAGED \
-  --protocols SFTP \
-  --endpoint-type PUBLIC \
-  --domain S3 \
-  --query ServerId \
-  --output text)
-
-aws transfer describe-server \
-  --region "$AWS_REGION" \
-  --server-id "$SERVER_ID" \
-  --query Server.State \
-  --output text
-
-cat > /tmp/transfer-session.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:ListBucket"],
-      "Resource": "arn:aws:s3:::${BUCKET}",
-      "Condition": {
-        "StringLike": {
-          "s3:prefix": [
-            "uploads/${ORGANIZATION_ID}",
-            "uploads/${ORGANIZATION_ID}/*"
-          ]
-        }
-      }
-    },
-    {
-      "Effect": "Allow",
-      "Action": "s3:GetBucketLocation",
-      "Resource": "arn:aws:s3:::${BUCKET}"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:GetObjectVersion"],
-      "Resource": "arn:aws:s3:::${BUCKET}/uploads/${ORGANIZATION_ID}/*"
-    }
-  ]
-}
-EOF
-
-aws transfer create-user \
-  --region "$AWS_REGION" \
-  --server-id "$SERVER_ID" \
-  --user-name "$ORGANIZATION_ID" \
-  --role "arn:aws:iam::${ACCOUNT_ID}:role/invoz-${APP_ENV}-transfer" \
-  --home-directory-type LOGICAL \
-  --home-directory-mappings "[{\"Entry\":\"/\",\"Target\":\"/${BUCKET}/uploads/${ORGANIZATION_ID}\"}]" \
-  --policy file:///tmp/transfer-session.json \
-  --ssh-public-key-body "$(cat erp-public-key.pub)"
-```
-
-Wait until the server state is `ONLINE`, then connect:
-
-```bash
-sftp -i erp-private-key "${ORGANIZATION_ID}@${SERVER_ID}.server.transfer.${AWS_REGION}.amazonaws.com"
+sftp "101@s-0123456789abcdef0.server.transfer.${AWS_REGION}.amazonaws.com"
 ```
 
 ## 3. SQS

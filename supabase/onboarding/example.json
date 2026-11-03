@@ -1,0 +1,21 @@
+{
+  "organization": {
+    "name": "Example Company (Pvt) Ltd",
+    "slug": "example-company",
+    "monthly_allowance": 500
+  },
+  "owner": {
+    "name": "Example Owner",
+    "email": "owner@example-company.lk"
+  },
+  "legal_entities": [
+    {
+      "name": "Example Company (Pvt) Ltd",
+      "tin": "100000001",
+      "vat_number": null,
+      "branches": [
+        { "code": "HO", "name": "Head office" }
+      ]
+    }
+  ]
+}
