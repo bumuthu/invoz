@@ -1,10 +1,6 @@
 {
   "auth_users": [
-    { "ref": "ayesha", "email": "ayesha@talentuner.lk", "name": "Ayesha Fernando" },
-    { "ref": "nimal", "email": "nimal@talentuner.lk", "name": "Nimal Perera" },
-    { "ref": "dilani", "email": "dilani@talentuner.lk", "name": "Dilani Jayasuriya" },
-    { "ref": "kasun", "email": "kasun@talentuner.lk", "name": "Kasun Silva" },
-    { "ref": "advisor", "email": "advisor@taxdesk.lk", "name": "Tax Desk" }
+    { "ref": "bumuthu", "email": "bumuthu@talentuner.lk", "name": "Bumuthu Dilshan" }
   ],
   "organizations": [
     {
@@ -43,11 +39,7 @@
     }
   ],
   "memberships": [
-    { "user_id": "ayesha", "organization_id": "talentuner", "role": "owner" },
-    { "user_id": "nimal", "organization_id": "talentuner", "role": "admin" },
-    { "user_id": "dilani", "organization_id": "talentuner", "role": "manager" },
-    { "user_id": "kasun", "organization_id": "talentuner", "role": "staff" },
-    { "user_id": "advisor", "organization_id": "talentuner", "role": "viewer" }
+    { "user_id": "bumuthu", "organization_id": "talentuner", "role": "owner" }
   ],
   "serial_counters": [
     {

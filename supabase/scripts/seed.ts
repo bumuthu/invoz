@@ -13,6 +13,8 @@ import { seeds, seedTables, type SeedDocument, type SeedRow } from "../seeders";
 
 const refs = new Map<string, string>();
 
+const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+
 const bigintColumns = new Set([
   "id",
   "organization_id",
@@ -48,6 +50,9 @@ function cell(column: string, value: unknown): unknown {
     (typeof resolved === "number" || typeof resolved === "string")
   ) {
     return BigInt(resolved);
+  }
+  if (typeof resolved === "string" && dateOnly.test(resolved)) {
+    return new Date(`${resolved}T00:00:00.000Z`);
   }
   return resolved;
 }
