@@ -88,6 +88,10 @@ async function createRow(tx: Prisma.TransactionClient, table: TableName, data: R
       return tx.membership.create({ data: data as Prisma.MembershipUncheckedCreateInput });
     case "field_mappings":
       return tx.fieldMapping.create({ data: data as Prisma.FieldMappingUncheckedCreateInput });
+    case "erp_connections":
+      return tx.erpConnection.create({ data: data as Prisma.ErpConnectionUncheckedCreateInput });
+    case "erp_field_mappings":
+      return tx.erpFieldMapping.create({ data: data as Prisma.ErpFieldMappingUncheckedCreateInput });
     case "ramis_credentials":
       return tx.ramisCredential.create({ data: data as Prisma.RamisCredentialUncheckedCreateInput });
     case "serial_counters":

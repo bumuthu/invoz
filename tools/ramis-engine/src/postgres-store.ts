@@ -15,8 +15,6 @@ type InvoiceRow = {
   vat_cents: string | number;
   total_cents: string | number;
   vat_rate_basis_points: string | number;
-  record_id: string;
-  approval_status: "PENDING_REVIEW" | "MATCHED";
   remaining_vat_cents: string | number;
   cleared_at: string;
   response: ClearanceResponse | string;
@@ -62,8 +60,6 @@ class PostgresTx implements StoreTx {
 
   async reset(): Promise<void> {
     await this.sql.query("truncate ramis_adjustments, ramis_invoices, ramis_idempotency");
-    await this.sql.query("update ramis_counters set value = 8849201 where name = 'record'");
-    await this.sql.query("update ramis_counters set value = 88310 where name = 'batch'");
   }
 
   async idempotency(bucket: string, tin: string, key: string): Promise<IdempotencyHit | undefined> {
@@ -101,24 +97,16 @@ class PostgresTx implements StoreTx {
     return row ? invoiceFromRow(row) : undefined;
   }
 
-  async invoiceByRecord(recordId: string): Promise<InvoiceRecord | undefined> {
-    const result = await this.sql.query<InvoiceRow>("select * from ramis_invoices where record_id = $1 for update", [
-      recordId,
-    ]);
-    const row = result.rows[0];
-    return row ? invoiceFromRow(row) : undefined;
-  }
-
   async insertInvoice(record: InvoiceRecord): Promise<void> {
     await this.sql.query(
       `insert into ramis_invoices (
          serial_number, payload_hash, supplier_tin, supplier_name, purchaser_tin, purchaser_name,
          invoice_date, supply_date, net_cents, vat_cents, total_cents, vat_rate_basis_points,
-         record_id, approval_status, remaining_vat_cents, cleared_at, response
+         remaining_vat_cents, cleared_at, response
        ) values (
          $1, $2, $3, $4, $5, $6,
          $7, $8, $9, $10, $11, $12,
-         $13, $14, $15, $16, cast($17 as jsonb)
+         $13, $14, cast($15 as jsonb)
        )`,
       [
         record.serialNumber,
@@ -133,8 +121,6 @@ class PostgresTx implements StoreTx {
         record.vatCents,
         record.totalCents,
         record.vatRateBasisPoints,
-        record.recordId,
-        record.approvalStatus,
         record.remainingVatCents,
         record.clearedAt,
         JSON.stringify(record.response),
@@ -145,9 +131,9 @@ class PostgresTx implements StoreTx {
   async saveInvoice(record: InvoiceRecord): Promise<void> {
     await this.sql.query(
       `update ramis_invoices
-       set approval_status = $2, remaining_vat_cents = $3
+       set remaining_vat_cents = $2
        where serial_number = $1`,
-      [record.serialNumber, record.approvalStatus, record.remainingVatCents],
+      [record.serialNumber, record.remainingVatCents],
     );
   }
 
@@ -178,40 +164,6 @@ class PostgresTx implements StoreTx {
     );
   }
 
-  async purchases(
-    buyerTin: string,
-    taxPeriod: string,
-    approvalStatus: "PENDING_REVIEW" | "MATCHED" | undefined,
-    page: number,
-    pageSize: number,
-  ): Promise<{ total: number; records: InvoiceRecord[] }> {
-    const filter = `purchaser_tin = $1 and substr(invoice_date, 1, 7) = $2 and ($3::text is null or approval_status = $3)`;
-    const params = [buyerTin, taxPeriod, approvalStatus ?? null];
-    const count = await this.sql.query<{ total: string | number }>(
-      `select count(*) as total from ramis_invoices where ${filter}`,
-      params,
-    );
-    const rows = await this.sql.query<InvoiceRow>(
-      `select * from ramis_invoices
-       where ${filter}
-       order by cleared_at asc, record_id asc
-       limit $4 offset $5`,
-      [...params, pageSize, (page - 1) * pageSize],
-    );
-    return {
-      total: Number(count.rows[0]?.total ?? 0),
-      records: rows.rows.map(invoiceFromRow),
-    };
-  }
-
-  async allocateRecordId(): Promise<number> {
-    return allocate(this.sql, "record");
-  }
-
-  async allocateBatchId(): Promise<number> {
-    return allocate(this.sql, "batch");
-  }
-
   async hasInvoice(serialNumber: string): Promise<boolean> {
     const result = await this.sql.query("select 1 as found from ramis_invoices where serial_number = $1", [
       serialNumber,
@@ -225,18 +177,6 @@ class PostgresTx implements StoreTx {
     ]);
     return result.rows.length > 0;
   }
-}
-
-async function allocate(sql: Sql, name: string): Promise<number> {
-  const result = await sql.query<{ value: string | number }>(
-    "update ramis_counters set value = value + 1 where name = $1 returning value",
-    [name],
-  );
-  const value = result.rows[0]?.value;
-  if (value === undefined) {
-    throw new Error(`ramis counter ${name} is missing`);
-  }
-  return Number(value) - 1;
 }
 
 function invoiceFromRow(row: InvoiceRow): InvoiceRecord {
@@ -253,8 +193,6 @@ function invoiceFromRow(row: InvoiceRow): InvoiceRecord {
     vatCents: Number(row.vat_cents),
     totalCents: Number(row.total_cents),
     vatRateBasisPoints: Number(row.vat_rate_basis_points),
-    recordId: row.record_id,
-    approvalStatus: row.approval_status,
     remainingVatCents: Number(row.remaining_vat_cents),
     clearedAt: row.cleared_at,
     response: jsonValue(row.response),

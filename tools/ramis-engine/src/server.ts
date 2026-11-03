@@ -8,7 +8,7 @@ import { openStore } from "./open-store";
 import { docsPage, openApiDocument } from "./spec";
 import type { Settings } from "./settings";
 import type { Store } from "./store";
-import { parseAdjustment, parseInvoice, parseTaxPeriod, requireClientTin, requireIdempotencyKey } from "./validation";
+import { parseAdjustment, parseInvoice, requireClientTin, requireIdempotencyKey } from "./validation";
 
 const EXEMPT = new Set(["/", "/health", "/docs", "/openapi.yaml", "/_mock/reset"]);
 
@@ -95,8 +95,6 @@ async function dispatch(state: App, call: ApiCall): Promise<ApiResult> {
         oauth: "POST /oauth/v2/token",
       schedule01: "POST /api/v1/vat/schedule01/invoices",
       schedule04: "POST /api/v1/vat/schedule04/adjustments",
-      schedule02: "GET /api/v1/vat/schedule02/purchases",
-      approve: "POST /api/v1/vat/schedule02/approve",
     });
   }
 
@@ -163,33 +161,6 @@ async function dispatch(state: App, call: ApiCall): Promise<ApiResult> {
     const idempotencyKey = requireIdempotencyKey(header(call, "x-idempotency-key"));
     const adjustment = parseAdjustment(parseJson(header(call, "content-type"), call.body), clientTin);
     return json(201, await state.ledger.clearAdjustment(adjustment, idempotencyKey));
-  }
-
-  if (method === "GET" && path === "/api/v1/vat/schedule02/purchases") {
-    requireBearer(header(call, "authorization"), state.settings.clientSecret);
-    const buyerTin = requireClientTin(header(call, "x-client-tin"));
-    const taxPeriod = parseTaxPeriod(url.searchParams.get("tax_period"), "tax_period");
-    const status = parsePurchaseStatus(url.searchParams.get("status"));
-    const page = positiveInt(url.searchParams.get("page"), "page", 1);
-    const pageSize = positiveInt(url.searchParams.get("page_size"), "page_size", state.settings.pageSizeDefault);
-    if (pageSize > state.settings.pageSizeMax) {
-      throw new RamisError(422, Code.SCHEMA, `page_size cannot exceed ${state.settings.pageSizeMax}`, "page_size");
-    }
-    const { total, records } = await state.ledger.purchases(buyerTin, taxPeriod, status, page, pageSize);
-    return json(200, { tax_period: taxPeriod, buyer_tin: buyerTin, total_records: total, records });
-  }
-
-  if (method === "POST" && path === "/api/v1/vat/schedule02/approve") {
-    requireBearer(header(call, "authorization"), state.settings.clientSecret);
-    const clientTin = requireClientTin(header(call, "x-client-tin"));
-    const body = asRecord(parseJson(header(call, "content-type"), call.body));
-    const buyerTin = requireClientTin(typeof body.buyer_tin === "number" ? String(body.buyer_tin) : stringOrUndefined(body.buyer_tin));
-    if (buyerTin !== clientTin) {
-      throw new RamisError(422, Code.TIN, "buyer_tin must match X-Client-TIN", "buyer_tin");
-    }
-    const taxPeriod = parseTaxPeriod(body.tax_period, "tax_period");
-    const recordIds = readRecordIds(body.record_ids, state.settings.approvalBatchMax);
-    return json(200, await state.ledger.approve(buyerTin, taxPeriod, recordIds));
   }
 
   const invoiceSerial = serialParam(path, "/api/v1/vat/schedule01/invoices/");
@@ -280,20 +251,6 @@ async function applyChaos(state: App, call: ApiCall): Promise<void> {
   }
 }
 
-function parsePurchaseStatus(value: string | null): "UNAPPROVED" | "MATCHED" | undefined {
-  if (value === null || value === "") return undefined;
-  if (value === "UNAPPROVED" || value === "MATCHED") return value;
-  throw new RamisError(422, Code.SCHEMA, "status must be UNAPPROVED or MATCHED", "status");
-}
-
-function positiveInt(value: string | null, field: string, fallback: number): number {
-  if (value === null || value === "") return fallback;
-  if (!/^[1-9][0-9]*$/.test(value)) {
-    throw new RamisError(422, Code.SCHEMA, `${field} must be a positive integer`, field);
-  }
-  return Number(value);
-}
-
 function serialParam(path: string, prefix: string): string | undefined {
   if (!path.startsWith(prefix)) return undefined;
   const rest = path.slice(prefix.length);
@@ -303,35 +260,6 @@ function serialParam(path: string, prefix: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function readRecordIds(value: unknown, max: number): string[] {
-  if (!Array.isArray(value)) {
-    throw new RamisError(422, Code.SCHEMA, "record_ids must be a list of record ids", "record_ids");
-  }
-  if (value.length === 0) {
-    throw new RamisError(422, Code.SCHEMA, "record_ids must include at least one record", "record_ids");
-  }
-  if (value.length > max) {
-    throw new RamisError(422, Code.SCHEMA, `record_ids cannot exceed ${max} records`, "record_ids");
-  }
-  return value.map((id) => {
-    if (typeof id !== "string" || id.trim() === "") {
-      throw new RamisError(422, Code.SCHEMA, "record_ids must be a list of record ids", "record_ids");
-    }
-    return id;
-  });
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new RamisError(422, Code.SCHEMA, "body must be an object", "body");
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringOrUndefined(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 class RateLimiter {

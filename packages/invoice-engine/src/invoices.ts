@@ -11,6 +11,7 @@ export type MappedInvoice = {
   netAmount: string;
   vatAmount: string;
   totalAmount: string;
+  invoiceType?: string;
 };
 
 const fields = {
@@ -25,9 +26,15 @@ const fields = {
 
 type FieldKey = (typeof fields)[keyof typeof fields];
 
+const optionalFields = {
+  "Invoice type": "invoiceType",
+  "ERP reference": "erpReference",
+} as const;
+
 export function invoicesFromCsv(
   csv: string,
   mappings: { source_column: string; target_field: string }[],
+  defaultBranchCode?: string,
 ): MappedInvoice[] {
   const rows = parseCsv(csv);
   const header = rows[0];
@@ -35,9 +42,11 @@ export function invoicesFromCsv(
     throw new Error("invoice file has no header");
   }
 
-  const columns = new Map<FieldKey, number>();
+  const columns = new Map<FieldKey | "invoiceType" | "erpReference", number>();
   for (const mapping of mappings) {
-    const field = fields[mapping.target_field as keyof typeof fields];
+    const field =
+      fields[mapping.target_field as keyof typeof fields] ??
+      optionalFields[mapping.target_field as keyof typeof optionalFields];
     if (!field) continue;
     const index = header.indexOf(mapping.source_column);
     if (index < 0) {
@@ -46,12 +55,13 @@ export function invoicesFromCsv(
     columns.set(field, index);
   }
   for (const [target, field] of Object.entries(fields)) {
+    if (field === "branchCode" && defaultBranchCode) continue;
     if (!columns.has(field)) {
       throw new Error(`field mapping has no ${target} column`);
     }
   }
 
-  const referenceIndex = header.findIndex((name) => /invoice\s*no/i.test(name));
+  const referenceIndex = columns.get("erpReference") ?? header.findIndex((name) => /invoice\s*no/i.test(name));
   if (referenceIndex < 0) {
     throw new Error("invoice file is missing the invoice number column");
   }
@@ -74,10 +84,11 @@ export function invoicesFromCsv(
       supplyDate,
       buyerTin,
       buyerName: required(read("buyerName"), "Buyer name"),
-      branchCode: required(read("branchCode"), "Branch code"),
+      branchCode: defaultBranchCode && !columns.has("branchCode") ? defaultBranchCode : required(read("branchCode"), "Branch code"),
       netAmount,
       vatAmount,
       totalAmount: (Number(netAmount) + Number(vatAmount)).toFixed(2),
+      invoiceType: columns.has("invoiceType") ? (row[columns.get("invoiceType") ?? -1] ?? "").trim() : undefined,
     });
   }
   if (invoices.length === 0) {

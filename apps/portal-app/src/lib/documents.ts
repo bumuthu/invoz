@@ -7,7 +7,6 @@ import type {
   InvoiceStatus,
   OverviewMetrics,
   PipelineCounts,
-  PortalFilters,
   ScheduleRow,
   TaxSlice,
 } from "@/lib/types";
@@ -128,7 +127,15 @@ export function buildDocuments(input: {
         entity: input.entityName.get(row.legal_entity_id) ?? String(row.legal_entity_id),
         entityId: String(row.legal_entity_id),
         kind: "Tax invoice" as const,
-        schedule: "01" as const,
+        schedule: row.invoice_type === "zero_rated" ? ("07" as const) : ("01" as const),
+        edit: {
+          invoiceDate: row.invoice_date.slice(0, 10),
+          supplyDate: row.supply_date.slice(0, 10),
+          net: row.amount_exclusive_vat,
+          vat: row.vat_amount,
+          total: row.total_amount,
+          parentDate: "",
+        },
         note: row.error_message ?? undefined,
         token: row.ramis_clearance_token ?? undefined,
         tags: tagsFor({
@@ -151,6 +158,8 @@ export function buildDocuments(input: {
     ...input.adjustments.map((row) => {
       const original = invoiceById.get(row.original_invoice_id);
       const credit = row.adjustment_type === "credit_note";
+      const buyer = row.customer_name ?? original?.customer_name ?? row.reason;
+      const buyerTin = row.customer_tin ?? original?.customer_tin ?? "";
       return {
         at: row.created_at,
         invoice: {
@@ -158,8 +167,8 @@ export function buildDocuments(input: {
           source: "adjustment" as const,
           sourceId: String(row.id),
           serial: row.serial_number ?? "—",
-          buyer: original?.customer_name ?? row.reason,
-          buyerTin: original?.customer_tin ?? "",
+          buyer,
+          buyerTin,
           invoiceDate: formatDate(row.adjustment_date),
           supplyDate: formatDate(row.adjustment_date),
           amount: formatMoney(row.adjusted_amount_exclusive_vat),
@@ -171,13 +180,21 @@ export function buildDocuments(input: {
           entityId: String(row.legal_entity_id),
           kind: credit ? ("Credit note" as const) : ("Debit note" as const),
           schedule: "04" as const,
+          edit: {
+            invoiceDate: row.adjustment_date.slice(0, 10),
+            supplyDate: row.adjustment_date.slice(0, 10),
+            net: row.adjusted_amount_exclusive_vat,
+            vat: row.adjusted_vat_amount,
+            total: row.adjusted_total_amount,
+            parentDate: row.original_invoice_date.slice(0, 10),
+          },
           note: row.error_message ?? undefined,
           token: row.ramis_clearance_token ?? undefined,
           parentSerial: row.original_serial_number,
           parentDate: formatDate(row.original_invoice_date),
           reason: row.reason,
           tags: tagsFor({
-            tin: original?.customer_tin ?? "",
+            tin: buyerTin,
             supplyDate: row.original_invoice_date,
             net: row.adjusted_amount_exclusive_vat,
             vat: row.adjusted_vat_amount,
@@ -233,13 +250,6 @@ export type ScopedDocument = Invoice & {
   day: string;
   month: string;
 };
-
-export function matchesOutbound(document: Invoice, filters: PortalFilters): boolean {
-  if (filters.schedule === "02") return false;
-  if (filters.schedule !== "all" && document.schedule !== filters.schedule) return false;
-  if (filters.status !== "all" && document.status !== filters.status) return false;
-  return true;
-}
 
 export function buildGaps(documents: ScopedDocument[]): GapRow[] {
   const groups = new Map<string, Set<number>>();

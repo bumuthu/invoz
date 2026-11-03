@@ -15,6 +15,8 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
+import ScheduleDownload from "@/components/ScheduleDownload";
+import Stack from "@mui/material/Stack";
 import { approveInbound } from "@/lib/actions";
 import type { ScheduleRow } from "@/lib/types";
 
@@ -34,12 +36,10 @@ export default function ScheduleView({
   rows,
   organizationId,
   canApprove,
-  hiddenBySchedule,
 }: {
   rows: ScheduleRow[];
   organizationId: string;
   canApprove: boolean;
-  hiddenBySchedule: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
@@ -53,10 +53,12 @@ export default function ScheduleView({
   return (
     <>
       <PageHeader
-        title="Schedule 02"
-        description="Supplier bills beside the ERP voucher reference. Approve up to 5,000 records."
+        title="Schedule 2"
+        description="Local purchases for the selected period. Approval here does not call RAMIS."
         action={
-          canApprove ? (
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <ScheduleDownload schedule="02" />
+            {canApprove ? (
             <Button
               variant="contained"
               disabled={pending || selected.length === 0 || selected.length > 5000}
@@ -79,7 +81,8 @@ export default function ScheduleView({
             <Typography variant="body2" color="text.secondary">
               View only
             </Typography>
-          )
+          )}
+          </Stack>
         }
       />
       {message ? (
@@ -92,9 +95,7 @@ export default function ScheduleView({
           Select at most 5,000 records.
         </Alert>
       ) : null}
-      {hiddenBySchedule ? (
-        <Typography color="text.secondary">This schedule is hidden by the schedule filter.</Typography>
-      ) : rows.length === 0 ? (
+      {rows.length === 0 ? (
         <Typography color="text.secondary">No purchases in this view.</Typography>
       ) : (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.15fr 0.85fr" }, gap: 2 }}>

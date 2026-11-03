@@ -90,9 +90,32 @@ model LegalEntity {
   inboundInvoices     InboundInvoice[]
   inboundAdjustments  InboundAdjustment[]
   auditLogs           AuditLog[]
+  erpConnection       ErpConnection?
 
   @@unique([organization_id, tin], map: "legal_entities_org_tin_uidx")
   @@map("legal_entities")
+}
+
+model ErpConnection {
+  legal_entity_id BigInt   @id
+  erp_code        String
+  status          String   @default("connected")
+  connected_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  legalEntity LegalEntity @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+
+  @@map("erp_connections")
+}
+
+model ErpFieldMapping {
+  id          BigInt @id @default(autoincrement())
+  erp_code    String
+  schedule    String
+  ramis_field String
+  erp_field   String
+
+  @@unique([erp_code, schedule, ramis_field], map: "erp_field_mappings_erp_schedule_field_uidx")
+  @@map("erp_field_mappings")
 }
 
 model Branch {
@@ -210,6 +233,8 @@ model OutboundAdjustment {
   original_serial_number        String
   original_invoice_date         DateTime       @db.Date
   reason                        String
+  customer_tin                  String?
+  customer_name                 String?
   adjustment_date               DateTime       @db.Date
   adjusted_amount_exclusive_vat Decimal        @db.Decimal(15, 2)
   adjusted_vat_amount           Decimal        @db.Decimal(15, 2)

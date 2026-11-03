@@ -3,7 +3,7 @@ info:
   title: RAMIS Web API Mock Engine
   version: 1.0.0
   description: |
-    Stand-in for the RAMIS VAT Web API. Cleared invoices, adjustments, and Schedule 02 approvals are stored by this service.
+    Stand-in for the RAMIS VAT Web API. Cleared invoices and adjustments are stored by this service.
 
     Obtain a bearer token with `POST /oauth/v2/token`, then send `Authorization`, `X-Client-TIN`, and `X-Idempotency-Key` on each submission.
   license:
@@ -15,7 +15,6 @@ tags:
   - name: Meta
   - name: Auth
   - name: Schedule 01
-  - name: Schedule 02
   - name: Schedule 04
 paths:
   /:
@@ -269,77 +268,6 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
-  /api/v1/vat/schedule02/purchases:
-    get:
-      tags: [Schedule 02]
-      summary: List purchases cleared against this buyer
-      operationId: listPurchases
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ClientTin"
-        - name: tax_period
-          in: query
-          required: true
-          schema:
-            type: string
-            pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
-            example: "2026-10"
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [UNAPPROVED, MATCHED]
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 5000
-            default: 500
-      responses:
-        "200":
-          description: Purchase page
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PurchasePage"
-        "401":
-          $ref: "#/components/responses/Error"
-        "422":
-          $ref: "#/components/responses/Error"
-  /api/v1/vat/schedule02/approve:
-    post:
-      tags: [Schedule 02]
-      summary: Mark purchase records as matched
-      operationId: approvePurchases
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ClientTin"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApprovalRequest"
-      responses:
-        "200":
-          description: Approval result. Partial batches still return 200.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApprovalResult"
-        "401":
-          $ref: "#/components/responses/Error"
-        "422":
-          $ref: "#/components/responses/Error"
   /_mock/reset:
     post:
       tags: [Meta]
@@ -373,7 +301,7 @@ components:
       schema:
         type: string
         pattern: "^[0-9]{9}$"
-      description: 9-digit TIN of the caller. For submissions this must be the supplier TIN. For Schedule 02 this is the buyer TIN.
+      description: 9-digit TIN of the caller. For submissions this must be the supplier TIN.
     IdempotencyKey:
       name: X-Idempotency-Key
       in: header
@@ -441,10 +369,6 @@ components:
         schedule01:
           type: string
         schedule04:
-          type: string
-        schedule02:
-          type: string
-        approve:
           type: string
     Health:
       type: object
@@ -683,101 +607,3 @@ components:
         cleared_timestamp:
           type: string
           format: date-time
-    PurchasePage:
-      type: object
-      required: [tax_period, buyer_tin, total_records, records]
-      properties:
-        tax_period:
-          type: string
-        buyer_tin:
-          type: string
-        total_records:
-          type: integer
-        records:
-          type: array
-          items:
-            $ref: "#/components/schemas/Purchase"
-    Purchase:
-      type: object
-      required:
-        - ramis_record_id
-        - supplier_tin
-        - supplier_name
-        - supplier_invoice_serial
-        - invoice_date
-        - supply_date
-        - value_excluding_vat
-        - vat_amount
-        - total_consideration
-        - submission_timestamp
-        - approval_status
-      properties:
-        ramis_record_id:
-          type: string
-        supplier_tin:
-          type: string
-        supplier_name:
-          type: string
-        supplier_invoice_serial:
-          type: string
-        invoice_date:
-          type: string
-          format: date
-        supply_date:
-          type: string
-          format: date
-        value_excluding_vat:
-          type: number
-        vat_amount:
-          type: number
-        total_consideration:
-          type: number
-        submission_timestamp:
-          type: string
-          format: date-time
-        approval_status:
-          type: string
-          enum: [PENDING_REVIEW, MATCHED]
-    ApprovalRequest:
-      type: object
-      required: [buyer_tin, tax_period, record_ids]
-      properties:
-        buyer_tin:
-          type: string
-          pattern: "^[0-9]{9}$"
-          description: Must equal X-Client-TIN.
-        tax_period:
-          type: string
-          example: "2026-10"
-        record_ids:
-          type: array
-          minItems: 1
-          maxItems: 5000
-          items:
-            type: string
-    ApprovalResult:
-      type: object
-      required: [status, records_approved, records_failed, status_updated_to, approval_batch_reference]
-      properties:
-        status:
-          type: string
-          enum: [SUCCESS, PARTIAL, FAILED]
-        records_approved:
-          type: integer
-        records_failed:
-          type: integer
-        status_updated_to:
-          type: string
-          enum: [Matched]
-        approval_batch_reference:
-          type: string
-        failures:
-          type: array
-          items:
-            type: object
-            required: [record_id, message]
-            properties:
-              record_id:
-                type: string
-              message:
-                type: string

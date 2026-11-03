@@ -2,8 +2,11 @@
 
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import Collapse from "@mui/material/Collapse";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -28,7 +31,7 @@ import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import PageSkeleton from "@/components/PageSkeleton";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FilterBar from "@/components/FilterBar";
@@ -39,13 +42,35 @@ import type { PortalData } from "@/lib/types";
 
 const drawerWidth = 252;
 
-const sections = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  audit?: boolean;
+  children?: { href: string; label: string }[];
+};
+
+const sections: { label?: string; items: NavItem[] }[] = [
   {
     items: [
       { href: "/", label: "Overview", icon: <SpaceDashboardOutlinedIcon fontSize="small" /> },
-      { href: "/invoices", label: "Invoices", icon: <ReceiptLongOutlinedIcon fontSize="small" /> },
+      {
+        href: "/schedules/automated",
+        label: "Automated Schedules",
+        icon: <ReceiptLongOutlinedIcon fontSize="small" />,
+        children: [
+          { href: "/schedules/01", label: "Schedule 01" },
+          { href: "/schedules/04", label: "Schedule 04" },
+          { href: "/schedules/07", label: "Schedule 07" },
+        ],
+      },
+      {
+        href: "/schedules/manual",
+        label: "Manual Schedules",
+        icon: <ListAltOutlinedIcon fontSize="small" />,
+        children: [{ href: "/schedules/02", label: "Schedule 2" }],
+      },
       { href: "/exceptions", label: "Exceptions", icon: <ReportOutlinedIcon fontSize="small" /> },
-      { href: "/schedule-02", label: "Schedule 02", icon: <FactCheckOutlinedIcon fontSize="small" /> },
       { href: "/audit", label: "Audit", icon: <PolicyOutlinedIcon fontSize="small" />, audit: true },
     ],
   },
@@ -53,7 +78,8 @@ const sections = [
     label: "Administration",
     items: [
       { href: "/ingestion", label: "Ingestion", icon: <CloudSyncOutlinedIcon fontSize="small" /> },
-      { href: "/setup/mapping", label: "Field mapping", icon: <AccountTreeOutlinedIcon fontSize="small" /> },
+      { href: "/setup/erp", label: "ERP", icon: <FactCheckOutlinedIcon fontSize="small" /> },
+      { href: "/setup/mapping", label: "Field Mapping", icon: <AccountTreeOutlinedIcon fontSize="small" /> },
       { href: "/setup/branches", label: "Branches", icon: <StorefrontOutlinedIcon fontSize="small" /> },
       { href: "/users", label: "Users", icon: <GroupOutlinedIcon fontSize="small" /> },
       { href: "/subscription", label: "Subscription", icon: <CreditCardOutlinedIcon fontSize="small" /> },
@@ -65,8 +91,8 @@ function showsFilters(pathname: string) {
   return (
     pathname === "/" ||
     pathname.startsWith("/invoices") ||
+    pathname.startsWith("/schedules") ||
     pathname.startsWith("/exceptions") ||
-    pathname.startsWith("/schedule-02") ||
     pathname.startsWith("/audit") ||
     pathname.startsWith("/ingestion") ||
     pathname.startsWith("/setup/")
@@ -90,6 +116,7 @@ function SidebarContent({
   const router = useRouter();
   const search = useSearchParams().toString();
   const current = pendingHref ?? pathname;
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   return (
     <Stack sx={{ height: "100%" }}>
@@ -119,11 +146,74 @@ function SidebarContent({
               </Typography>
             ) : null}
             <List disablePadding>
-              {section.items.filter((item) => !("audit" in item) || canAudit).map((item) => {
+              {section.items.filter((item) => !item.audit || canAudit).map((item) => {
                 const active =
                   item.href === "/"
                     ? current === "/"
                     : current === item.href || current.startsWith(`${item.href}/`);
+                const itemSx = (selected: boolean) => ({
+                  mb: 0.5,
+                  borderRadius: 2,
+                  py: 0.9,
+                  borderLeft: "3px solid",
+                  borderColor: selected ? "secondary.main" : "transparent",
+                  color: selected ? "text.primary" : "text.secondary",
+                  "&:hover": { bgcolor: "action.hover" },
+                  "&.Mui-selected": { bgcolor: "action.hover", color: "text.primary" },
+                  "&.Mui-selected:hover": { bgcolor: "action.hover" },
+                });
+                if (item.children) {
+                  const groupHasCurrent = item.children.some(
+                    (child) => current === child.href || current.startsWith(`${child.href}/`),
+                  );
+                  const groupOpen = openGroups[item.href] ?? groupHasCurrent;
+                  return (
+                    <Box key={item.href}>
+                      <ListItemButton
+                        selected={false}
+                        onClick={() => setOpenGroups((groups) => ({ ...groups, [item.href]: !groupOpen }))}
+                        aria-expanded={groupOpen}
+                        sx={{ ...itemSx(false), pl: 1.25 }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>{item.icon}</ListItemIcon>
+                        <ListItemText
+                          primary={item.label}
+                          slotProps={{ primary: { sx: { fontSize: 14, fontWeight: 500 } } }}
+                        />
+                        <ExpandMoreIcon
+                          fontSize="small"
+                          sx={{ transform: groupOpen ? "rotate(180deg)" : "none", transition: "transform 150ms" }}
+                        />
+                      </ListItemButton>
+                      <Collapse in={groupOpen}>
+                        <List disablePadding>
+                          {item.children.map((child) => {
+                            const childActive = current === child.href || current.startsWith(`${child.href}/`);
+                            return (
+                              <ListItemButton
+                                key={child.href}
+                                selected={childActive}
+                                onClick={() => {
+                                  if (pathname !== child.href) onSelect(child.href);
+                                  router.push(search ? `${child.href}?${search}` : child.href);
+                                  onNavigate?.();
+                                }}
+                                sx={{ ...itemSx(childActive), pl: 5.5 }}
+                              >
+                                <ListItemText
+                                  primary={child.label}
+                                  slotProps={{
+                                    primary: { sx: { fontSize: 13.5, fontWeight: childActive ? 600 : 500 } },
+                                  }}
+                                />
+                              </ListItemButton>
+                            );
+                          })}
+                        </List>
+                      </Collapse>
+                    </Box>
+                  );
+                }
                 return (
                   <ListItemButton
                     key={item.href}
@@ -133,25 +223,7 @@ function SidebarContent({
                       router.push(search ? `${item.href}?${search}` : item.href);
                       onNavigate?.();
                     }}
-                    sx={{
-                      mb: 0.5,
-                      borderRadius: 2,
-                      py: 0.9,
-                      pl: 1.25,
-                      borderLeft: "3px solid",
-                      borderColor: active ? "secondary.main" : "transparent",
-                      color: active ? "text.primary" : "text.secondary",
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                      "&.Mui-selected": {
-                        bgcolor: "action.hover",
-                        color: "text.primary",
-                      },
-                      "&.Mui-selected:hover": {
-                        bgcolor: "action.hover",
-                      },
-                    }}
+                    sx={{ ...itemSx(active), pl: 1.25 }}
                   >
                     <ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>{item.icon}</ListItemIcon>
                     <ListItemText

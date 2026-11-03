@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Code, RamisError } from "./errors";
 
-export const TOKEN_SCOPE = "vat:schedule01:write vat:schedule02:read vat:schedule04:write";
+export const TOKEN_SCOPE = "vat:schedule01:write vat:schedule04:write";
 
 export type AccessToken = {
   access_token: string;

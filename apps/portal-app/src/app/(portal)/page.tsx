@@ -27,7 +27,7 @@ export default async function OverviewPage() {
     {
       label: "Input VAT at risk",
       value: metrics.inputAtRisk,
-      note: "Schedule 02 purchases not yet approved.",
+      note: "Schedule 2 records not yet approved.",
     },
     {
       label: "Active exceptions",

@@ -6,14 +6,19 @@ export type DocumentKind = "Tax invoice" | "Credit note" | "Debit note";
 
 export type DocumentSource = "invoice" | "adjustment";
 
-export type ScheduleFilter = "all" | "01" | "02" | "04";
-
 export type PortalFilters = {
   entityId: string;
   branch: string;
   period: string;
-  schedule: ScheduleFilter;
-  status: "all" | InvoiceStatus;
+};
+
+export type DocumentEdit = {
+  invoiceDate: string;
+  supplyDate: string;
+  net: string;
+  vat: string;
+  total: string;
+  parentDate: string;
 };
 
 export type Invoice = {
@@ -33,7 +38,8 @@ export type Invoice = {
   entity: string;
   entityId: string;
   kind: DocumentKind;
-  schedule: "01" | "04";
+  schedule: "01" | "04" | "07";
+  edit: DocumentEdit;
   note?: string;
   token?: string;
   parentSerial?: string;
@@ -71,10 +77,23 @@ export type ScheduleRow = {
   entity: string;
 };
 
-export type FieldMappingView = {
-  source: string;
-  target: string;
+export type ErpOption = {
+  code: string;
+  name: string;
+};
+
+export type ScheduleMapRow = {
+  schedule: "01" | "04" | "07";
+  erpField: string;
+  ramisField: string;
+};
+
+export type ErpConnectionView = {
+  code: string;
+  name: string;
   entityId: string;
+  entityName: string;
+  connectedAt: string;
 };
 
 export type EntityOption = {
@@ -179,8 +198,10 @@ export type PortalData = {
   periods: string[];
   filters: PortalFilters;
   query: string;
-  fieldMappings: FieldMappingView[];
-  targetFields: string[];
+  erpCatalog: ErpOption[];
+  erpConnections: ErpConnectionView[];
+  erpConnection: ErpConnectionView | null;
+  scheduleMaps: ScheduleMapRow[];
   invoices: Invoice[];
   recent: Invoice[];
   rejected: Invoice[];

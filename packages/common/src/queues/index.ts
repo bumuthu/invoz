@@ -1,4 +1,4 @@
-import { isPayloadHash } from "../utils";
+import { isBranchCode, isPayloadHash } from "../utils";
 
 export const deployEnvironments = ["stag", "prod"] as const;
 export type DeployEnvironment = (typeof deployEnvironments)[number];
@@ -79,6 +79,55 @@ export function invoiceMessageDeduplicationId(payloadSha256: string): string {
     throw new Error("MessageDeduplicationId must be a sha256 hex hash");
   }
   return payloadSha256;
+}
+
+export const resubmitDocuments = ["invoice", "adjustment"] as const;
+export type ResubmitDocument = (typeof resubmitDocuments)[number];
+
+export type ResubmitJob = {
+  source: "resubmit";
+  organizationId: number;
+  legalEntityId: number;
+  branchCode: string;
+  document: ResubmitDocument;
+  documentId: number;
+};
+
+const resubmitDocumentSet = new Set<string>(resubmitDocuments);
+
+export function parseResubmitJob(body: string): ResubmitJob {
+  const value: unknown = JSON.parse(body);
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Queue body must be an object");
+  }
+  const job = value as {
+    source?: unknown;
+    organizationId?: unknown;
+    legalEntityId?: unknown;
+    branchCode?: unknown;
+    document?: unknown;
+    documentId?: unknown;
+  };
+  if (job.source !== "resubmit") throw new Error("source must be resubmit");
+  const organizationId = rowId(job.organizationId);
+  const legalEntityId = rowId(job.legalEntityId);
+  const documentId = rowId(job.documentId);
+  const branchCode = text(job.branchCode);
+  if (organizationId === undefined || legalEntityId === undefined || documentId === undefined || !branchCode) {
+    throw new Error("organizationId, legalEntityId, branchCode, and documentId are required");
+  }
+  if (!isBranchCode(branchCode)) throw new Error("branchCode must be 1 to 15 letters or digits");
+  if (typeof job.document !== "string" || !resubmitDocumentSet.has(job.document)) {
+    throw new Error("document must be invoice or adjustment");
+  }
+  return {
+    source: "resubmit",
+    organizationId,
+    legalEntityId,
+    branchCode,
+    document: job.document as ResubmitDocument,
+    documentId,
+  };
 }
 
 export function parseInvoiceJob(body: string): InvoiceJob {

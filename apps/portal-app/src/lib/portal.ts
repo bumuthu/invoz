@@ -10,7 +10,6 @@ import {
 import {
   auditLogRow,
   branchRow,
-  fieldMappingRow,
   inboundInvoiceRow,
   invoiceUsageRow,
   legalEntityRow,
@@ -30,12 +29,11 @@ import {
   formatDate,
   formatMoney,
   formatStamp,
-  matchesOutbound,
   monthTitle,
   type ScopedDocument,
 } from "@/lib/documents";
+import { erpCatalog, erpName } from "@/lib/erps";
 import { monthKey, monthRange, writeFilters } from "@/lib/filters";
-import { targetFields } from "@/lib/fields";
 import { supabase } from "@/lib/supabase";
 import type { AuditEvent, BranchView, PortalData, ScheduleRow } from "@/lib/types";
 
@@ -180,9 +178,10 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
   const { flags, organizationId, entities, appliedFilters, entityIds, branches } = ctx;
   const range = monthRange(appliedFilters.period);
 
-  const [counterRecords, mappingRecords, membershipRecords, usageRecords, accountResult] = await Promise.all([
+  const selectedEntityId = appliedFilters.entityId === "all" ? null : entityIds[0];
+  const [counterRecords, connectionRecords, membershipRecords, usageRecords, accountResult] = await Promise.all([
     prisma.serialCounter.findMany({ where: { legal_entity_id: { in: entityIds } } }),
-    prisma.fieldMapping.findMany({ where: { legal_entity_id: { in: entityIds } }, orderBy: { source_column: "asc" } }),
+    prisma.erpConnection.findMany({ where: { legal_entity_id: { in: entityIds } } }),
     prisma.membership.findMany({ where: { organization_id: organizationId } }),
     prisma.invoiceUsage.findMany({ where: { organization_id: organizationId } }),
     supabase().auth.admin.listUsers({ perPage: 1000 }),
@@ -191,7 +190,15 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     throw new Error(`auth users: ${accountResult.error.message}`);
   }
   const counters = counterRecords.map(serialCounterRow);
-  const mappings = mappingRecords.map(fieldMappingRow);
+  const connectionRecord = selectedEntityId
+    ? (connectionRecords.find((row) => row.legal_entity_id === selectedEntityId) ?? null)
+    : null;
+  const mapRecords = connectionRecord
+    ? await prisma.erpFieldMapping.findMany({
+        where: { erp_code: connectionRecord.erp_code },
+        orderBy: [{ schedule: "asc" }, { ramis_field: "asc" }],
+      })
+    : [];
   const selectedBranch = branches.filter((branch) => branchKey(branch.legal_entity_id, branch.code) === appliedFilters.branch);
   const branchIds = appliedFilters.branch === "all" ? null : selectedBranch.map((branch) => BigInt(branch.id));
   const documentWhere = {
@@ -260,17 +267,8 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
     vatValue: Number(row.vat_amount),
     month: monthKey(row.invoice_date),
   }));
-  const visible = scoped.filter((document) => matchesOutbound(document, appliedFilters));
-  const rejected = scoped.filter(
-    (document) =>
-      document.status === "Rejected" &&
-      matchesOutbound(document, { ...appliedFilters, status: "all" }) &&
-      (appliedFilters.status === "all" || appliedFilters.status === "Rejected"),
-  );
-  const scheduleRows: ScheduleRow[] =
-    appliedFilters.schedule === "01" || appliedFilters.schedule === "04"
-      ? []
-      : purchases.map(({ vatValue: _vat, month: _month, ...row }) => row);
+  const rejected = scoped.filter((document) => document.status === "Rejected");
+  const scheduleRows: ScheduleRow[] = purchases.map(({ vatValue: _vat, month: _month, ...row }) => row);
 
   const preferredGazette = gazettePeriod(appliedFilters.period);
   const branchViews: BranchView[] = branches.map((branch) => {
@@ -348,13 +346,29 @@ export const loadPortal = cache(async (): Promise<PortalData> => {
       monthLabel: usage ? monthTitle(usage.period) : monthTitle(new Date().toISOString()),
     },
     branches: branchViews,
-    fieldMappings: mappings.map((row) => ({
-      source: row.source_column,
-      target: row.target_field,
+    erpCatalog: erpCatalog.map((erp) => ({ code: erp.code, name: erp.name })),
+    erpConnections: connectionRecords.map((row) => ({
+      code: row.erp_code,
+      name: erpName(row.erp_code),
       entityId: String(row.legal_entity_id),
+      entityName: entityName.get(Number(row.legal_entity_id)) ?? String(row.legal_entity_id),
+      connectedAt: row.connected_at.toISOString(),
     })),
-    targetFields: [...targetFields],
-    invoices: strip(visible),
+    erpConnection: connectionRecord
+      ? {
+          code: connectionRecord.erp_code,
+          name: erpName(connectionRecord.erp_code),
+          entityId: String(connectionRecord.legal_entity_id),
+          entityName: entityName.get(Number(connectionRecord.legal_entity_id)) ?? String(connectionRecord.legal_entity_id),
+          connectedAt: connectionRecord.connected_at.toISOString(),
+        }
+      : null,
+    scheduleMaps: mapRecords.flatMap((row) =>
+      row.schedule === "01" || row.schedule === "04" || row.schedule === "07"
+        ? [{ schedule: row.schedule, erpField: row.erp_field, ramisField: row.ramis_field }]
+        : [],
+    ),
+    invoices: strip(scoped),
     recent: strip(scoped.slice(0, 4)),
     rejected: strip(rejected),
     scheduleRows,

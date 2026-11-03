@@ -12,8 +12,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import CorrectDocument from "@/components/CorrectDocument";
 import PageHeader from "@/components/PageHeader";
-import RequeueButton from "@/components/RequeueButton";
 import type { Invoice } from "@/lib/types";
 
 export default function ExceptionsView({
@@ -45,7 +45,7 @@ export default function ExceptionsView({
     <>
       <PageHeader
         title="Exceptions"
-        description="Rejected documents. Open a row to compare the stored fields with the failure, then re-queue it."
+        description="Rejected Schedule 01, 04, and 07 documents. Open one row, correct it, and resubmit that document."
       />
       <Card>
         {invoices.length === 0 ? (
@@ -114,10 +114,10 @@ export default function ExceptionsView({
               ))}
             </Stack>
             {canRequeue ? (
-              <RequeueButton organizationId={organizationId} source={selected.source} sourceId={selected.sourceId} />
+              <CorrectDocument invoice={selected} organizationId={organizationId} />
             ) : (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                Your role can view this exception and cannot re-queue it.
+                Your role can view this exception and cannot resubmit it.
               </Typography>
             )}
           </Box>

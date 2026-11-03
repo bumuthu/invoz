@@ -1,6 +1,8 @@
 export type {
   AuditLogRow,
   BranchRow,
+  ErpConnectionRow,
+  ErpFieldMappingRow,
   FieldMappingRow,
   InboundAdjustmentRow,
   InboundInvoiceRow,
@@ -21,6 +23,8 @@ export { tableColumns } from "./rows";
 export {
   toAuditLog,
   toBranch,
+  toErpConnection,
+  toErpFieldMapping,
   toFieldMapping,
   toInboundAdjustment,
   toInboundInvoice,

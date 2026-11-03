@@ -7,9 +7,6 @@ export type Settings = {
   defaultDelaySeconds: number;
   forceOutage: boolean;
   forceThrottle: boolean;
-  pageSizeDefault: number;
-  pageSizeMax: number;
-  approvalBatchMax: number;
   host: string;
   port: number;
   databaseUrl: string;
@@ -39,9 +36,6 @@ export function settingsFromEnv(env: NodeJS.ProcessEnv = process.env): Settings 
     defaultDelaySeconds: integer(env, "RAMIS_MOCK_DELAY_SECONDS", 0),
     forceOutage: flag(env, "RAMIS_MOCK_FORCE_OUTAGE"),
     forceThrottle: flag(env, "RAMIS_MOCK_FORCE_THROTTLE"),
-    pageSizeDefault: integer(env, "RAMIS_MOCK_PAGE_SIZE_DEFAULT", 500),
-    pageSizeMax: integer(env, "RAMIS_MOCK_PAGE_SIZE_MAX", 5000),
-    approvalBatchMax: integer(env, "RAMIS_MOCK_APPROVAL_BATCH_MAX", 5000),
     host: env.HOST?.trim() || "127.0.0.1",
     port: integer(env, "PORT", 8090),
     databaseUrl: env.RAMIS_DATABASE_URL?.trim() || "",

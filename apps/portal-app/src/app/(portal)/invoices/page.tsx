@@ -1,7 +1,5 @@
-import InvoicesView from "./InvoicesView";
-import { loadPortal } from "@/lib/portal";
+import { redirect } from "next/navigation";
 
-export default async function InvoicesPage() {
-  const portal = await loadPortal();
-  return <InvoicesView invoices={portal.invoices} />;
+export default function InvoicesPage() {
+  redirect("/schedules/01");
 }

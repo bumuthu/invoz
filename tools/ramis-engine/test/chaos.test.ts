@@ -20,7 +20,6 @@ test("oauth issues a bearer token and rejects a bad secret", async () => {
     assert.equal(token.expires_in, 3600);
     assert.match(token.access_token, /^ramis_sec_jwt_/);
     assert.match(token.scope, /vat:schedule01:write/);
-    assert.match(token.scope, /vat:schedule02:read/);
     assert.match(token.scope, /vat:schedule04:write/);
 
     const rejected = await fetch(`${baseUrl}/oauth/v2/token`, {

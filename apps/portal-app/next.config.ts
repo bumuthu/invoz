@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   env,
   transpilePackages: ["@invoz/common", "@invoz/database"],
-  serverExternalPackages: ["@prisma/client", ".prisma/client"],
+  serverExternalPackages: ["@prisma/client", ".prisma/client", "@aws-sdk/client-sqs"],
   async headers() {
     return [
       {

@@ -9,8 +9,8 @@ import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
+import CorrectDocument from "@/components/CorrectDocument";
 import PageHeader from "@/components/PageHeader";
-import RequeueButton from "@/components/RequeueButton";
 import StatusChip from "@/components/StatusChip";
 import type { Invoice } from "@/lib/types";
 
@@ -101,16 +101,20 @@ export default function InvoiceDetail({
               {invoice.status === "Cleared"
                 ? "This document is cleared and cannot be edited or re-queued."
                 : invoice.status === "Rejected"
-                  ? "RAMIS was not left with a clearance. Re-queue it after the source file is corrected."
+                  ? "Correct the fields below and resubmit this document. Serial, legal entity, and branch stay locked."
                   : invoice.status === "Skipped"
                     ? "Marked skipped. RAMIS was not called."
                     : "Queued for the invoice engine."}
             </Typography>
             {invoice.status === "Rejected" && canRequeue ? (
-              <RequeueButton organizationId={organizationId} source={invoice.source} sourceId={invoice.sourceId} />
+              <CorrectDocument invoice={invoice} organizationId={organizationId} />
             ) : (
-              <Button component={Link} href="/invoices" sx={{ mt: 2.5 }}>
-                Back to invoices
+              <Button
+                component={Link}
+                href={invoice.schedule === "04" ? "/schedules/04" : invoice.schedule === "07" ? "/schedules/07" : "/schedules/01"}
+                sx={{ mt: 2.5 }}
+              >
+                Back to schedule
               </Button>
             )}
           </CardContent>

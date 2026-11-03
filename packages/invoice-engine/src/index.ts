@@ -1,11 +1,23 @@
 import { createHash } from "node:crypto";
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
-import { isSettledInvoiceKey, isTin, parseInvoiceJob, type InvoiceClass } from "@invoz/common";
+import { isSettledInvoiceKey, isTin, parseInvoiceJob, parseResubmitJob, type InvoiceClass } from "@invoz/common";
 import { prisma, type Prisma } from "@invoz/database";
 import type { SQSHandler } from "aws-lambda";
 import { alertRamisClearedCommitFailed } from "./alert";
 import { invoicesFromCsv, type MappedInvoice } from "./invoices";
-import { idempotencyKey, RamisRejection, ramisPayload, submitInvoice, type Clearance } from "./ramis";
+import { processResubmit } from "./resubmit";
+import { idempotencyKey, RamisRejection, ramisPayload, submitInvoice, type Clearance } from "@invoz/common/ramis";
+
+const pathTargets: Record<string, string> = {
+  "header.invoice_date": "Invoice date",
+  "header.supply_date": "Supply date",
+  "purchaser.tin": "Buyer TIN",
+  "purchaser.name": "Buyer name",
+  "currency_summary.total_value_excluding_vat": "Net amount",
+  "currency_summary.total_vat_amount": "VAT amount",
+  "header.invoice_type": "Invoice type",
+  "header.erp_reference": "ERP reference",
+};
 
 const s3 = new S3Client({});
 
@@ -19,11 +31,24 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   const csv = await readInvoice(job.bucket, job.objectKey);
   if (csv === undefined) return;
 
-  const mappings = await prisma.fieldMapping.findMany({
+  const connection = await prisma.erpConnection.findUnique({
     where: { legal_entity_id: BigInt(entity.id) },
-    select: { source_column: true, target_field: true },
   });
-  const invoices = invoicesFromCsv(csv, mappings);
+  if (!connection) throw new Error("legal entity has no connected ERP");
+  const stored = await prisma.erpFieldMapping.findMany({
+    where: { erp_code: connection.erp_code, schedule: "01" },
+  });
+  const mappings = stored.flatMap((row) => {
+    const target = pathTargets[row.ramis_field];
+    return target ? [{ source_column: row.erp_field, target_field: target }] : [];
+  });
+  const branch = job.branchId
+    ? await prisma.branch.findFirst({
+        where: { id: BigInt(job.branchId), legal_entity_id: BigInt(entity.id) },
+        select: { code: true },
+      })
+    : null;
+  const invoices = invoicesFromCsv(csv, mappings, branch?.code);
   let rejected = false;
   for (const invoice of invoices) {
     const outcome = await submitMappedInvoice(entity, job.objectKey, job.branchId, invoice);
@@ -65,7 +90,7 @@ async function submitMappedInvoice(
   let clearance: Clearance | undefined;
   let serialNumber = "";
   try {
-    return await prisma.$transaction(
+    const prepared = await prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`select set_config('statement_timeout', '55s', true)`;
         await tx.$executeRaw`select set_config('idle_in_transaction_session_timeout', '55s', true)`;
@@ -78,31 +103,48 @@ async function submitMappedInvoice(
         `;
         const existing = locked[0];
         if (existing?.ramis_status === "cleared" || existing?.ramis_status === "rejected") {
-          return existing.ramis_status === "cleared" ? "cleared" : "rejected";
+          return { outcome: existing.ramis_status === "cleared" ? "cleared" : "rejected" } as const;
         }
 
         serialNumber = existing?.serial_number ?? (await nextSerial(tx, branch.id, invoice.invoiceDate));
-        const payload = ramisPayload(invoice, serialNumber, entity, branch.name);
+        const invoiceType = storedClass(invoice);
+        const payload = ramisPayload(invoice, serialNumber, entity, branch.name, invoiceType);
         const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-        const invoiceId = existing?.id ?? (await insertQueued(tx, entity, branch.id, branch.name, invoice, serialNumber, hash));
-
-        clearance = await submitInvoice(payload, idempotencyKey(objectKey, invoice.erpReference));
-        await tx.outboundInvoice.update({
-          where: { id: invoiceId },
-          data: {
-            ramis_status: "cleared",
-            ramis_clearance_token: clearance.token,
-            ramis_payload_hash: clearance.hash,
-            cleared_at: new Date(clearance.clearedAt),
-            error_message: null,
-          },
-        });
-        return "cleared";
+        const invoiceId = existing
+          ? existing.id
+          : await insertQueued(tx, entity, branch.id, branch.name, invoice, serialNumber, hash, invoiceType);
+        return { outcome: "submit" as const, invoiceId, payload, serialNumber };
       },
       { timeout: 55_000, maxWait: 10_000 },
     );
+    if (prepared.outcome !== "submit") return prepared.outcome;
+    serialNumber = prepared.serialNumber;
+    clearance = await submitInvoice(prepared.payload, idempotencyKey(objectKey, invoice.erpReference));
+    await prisma.outboundInvoice.update({
+      where: { id: prepared.invoiceId },
+      data: {
+        ramis_status: "cleared",
+        ramis_clearance_token: clearance.token,
+        ramis_payload_hash: clearance.hash,
+        cleared_at: new Date(clearance.clearedAt),
+        error_message: null,
+      },
+    });
+    return "cleared";
   } catch (error) {
-    if (error instanceof RamisRejection) return "rejected";
+    if (error instanceof RamisRejection) {
+      const rejected = await prisma.outboundInvoice.findFirst({
+        where: { legal_entity_id: BigInt(entity.id), erp_reference: invoice.erpReference },
+        select: { id: true },
+      });
+      if (rejected) {
+        await prisma.outboundInvoice.update({
+          where: { id: rejected.id },
+          data: { ramis_status: "rejected", error_message: error.message },
+        });
+      }
+      return "rejected";
+    }
     if (clearance) {
       alertRamisClearedCommitFailed({
         organizationId: entity.organization_id,
@@ -128,6 +170,14 @@ async function nextSerial(tx: Prisma.TransactionClient, branchId: bigint, invoic
   return serial;
 }
 
+function storedClass(invoice: MappedInvoice): InvoiceClass {
+  const raw = invoice.invoiceType?.trim().toUpperCase();
+  if (raw === "ZERO_RATED" || raw === "ZERO_RATED_INVOICE") return "zero_rated";
+  if (raw === "FINANCIAL_SERVICES" || raw === "FINANCIAL_SERVICES_TAX_INVOICE") return "financial_services";
+  if (raw === "EXEMPT" || raw === "EXEMPT_INVOICE" || Number(invoice.vatAmount) === 0) return "exempt";
+  return "standard";
+}
+
 async function insertQueued(
   tx: Prisma.TransactionClient,
   entity: Entity,
@@ -136,9 +186,8 @@ async function insertQueued(
   invoice: MappedInvoice,
   serialNumber: string,
   hash: string,
+  invoiceType: InvoiceClass,
 ): Promise<bigint> {
-  const exempt = Number(invoice.vatAmount) === 0;
-  const invoiceType: InvoiceClass = exempt ? "exempt" : "standard";
   const created = await tx.outboundInvoice.create({
     data: {
       organization_id: BigInt(entity.organization_id),
@@ -155,7 +204,7 @@ async function insertQueued(
       currency: "LKR",
       exchange_rate: "1.0000",
       amount_exclusive_vat: invoice.netAmount,
-      vat_rate: exempt ? "0.00" : "18.00",
+      vat_rate: invoiceType === "financial_services" ? "20.50" : invoiceType === "standard" ? "18.00" : "0.00",
       vat_amount: invoice.vatAmount,
       total_amount: invoice.totalAmount,
       ramis_status: "queued",
@@ -198,6 +247,10 @@ export const handler: SQSHandler = async (event) => {
     try {
       const job = JSON.parse(record.body) as { source?: unknown; objectKey?: unknown };
       if (job.source === "s3" && typeof job.objectKey === "string" && isSettledInvoiceKey(job.objectKey)) {
+        continue;
+      }
+      if (job.source === "resubmit") {
+        await processResubmit(parseResubmitJob(record.body));
         continue;
       }
       await processInvoiceJob(parseInvoiceJob(record.body));

@@ -1,6 +1,8 @@
 import type {
   AuditLog,
   Branch,
+  ErpConnection,
+  ErpFieldMapping,
   FieldMapping,
   InboundAdjustment,
   InboundInvoice,
@@ -16,6 +18,8 @@ import type {
 import type {
   AuditLogRow,
   BranchRow,
+  ErpConnectionRow,
+  ErpFieldMappingRow,
   FieldMappingRow,
   InboundAdjustmentRow,
   InboundInvoiceRow,
@@ -79,6 +83,25 @@ export function toFieldMapping(row: FieldMappingRow): FieldMapping {
   };
 }
 
+export function toErpConnection(row: ErpConnectionRow): ErpConnection {
+  return {
+    legalEntityId: row.legal_entity_id,
+    erpCode: row.erp_code,
+    status: row.status,
+    connectedAt: row.connected_at,
+  };
+}
+
+export function toErpFieldMapping(row: ErpFieldMappingRow): ErpFieldMapping {
+  return {
+    id: row.id,
+    erpCode: row.erp_code,
+    schedule: row.schedule,
+    ramisField: row.ramis_field,
+    erpField: row.erp_field,
+  };
+}
+
 export function toRamisCredential(row: RamisCredentialRow): RamisCredential {
   return {
     legalEntityId: row.legal_entity_id,
@@ -139,6 +162,8 @@ export function toOutboundAdjustment(row: OutboundAdjustmentRow): OutboundAdjust
     originalSerialNumber: row.original_serial_number,
     originalInvoiceDate: row.original_invoice_date,
     reason: row.reason,
+    customerTin: row.customer_tin,
+    customerName: row.customer_name,
     adjustmentDate: row.adjustment_date,
     adjustedAmountExclusiveVat: row.adjusted_amount_exclusive_vat,
     adjustedVatAmount: row.adjusted_vat_amount,

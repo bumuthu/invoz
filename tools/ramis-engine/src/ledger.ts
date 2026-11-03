@@ -23,29 +23,6 @@ export type AdjustmentResponse = {
   cleared_timestamp: string;
 };
 
-export type PurchaseRecord = {
-  ramis_record_id: string;
-  supplier_tin: string;
-  supplier_name: string;
-  supplier_invoice_serial: string;
-  invoice_date: string;
-  supply_date: string;
-  value_excluding_vat: number;
-  vat_amount: number;
-  total_consideration: number;
-  submission_timestamp: string;
-  approval_status: "PENDING_REVIEW" | "MATCHED";
-};
-
-export type ApprovalResult = {
-  status: "SUCCESS" | "PARTIAL" | "FAILED";
-  records_approved: number;
-  records_failed: number;
-  status_updated_to: "Matched";
-  approval_batch_reference: string;
-  failures?: { record_id: string; message: string }[];
-};
-
 export class Ledger {
   constructor(private readonly store: Store = new MemoryStore()) {}
 
@@ -67,25 +44,6 @@ export class Ledger {
 
   clearAdjustment(adjustment: NormalizedAdjustment, idempotencyKey: string): Promise<AdjustmentResponse> {
     return this.store.transaction((tx) => this.clearAdjustmentOn(tx, adjustment, idempotencyKey));
-  }
-
-  async purchases(
-    buyerTin: string,
-    taxPeriod: string,
-    status: "UNAPPROVED" | "MATCHED" | undefined,
-    page: number,
-    pageSize: number,
-  ): Promise<{ total: number; records: PurchaseRecord[] }> {
-    const wanted = status === "UNAPPROVED" ? "PENDING_REVIEW" : status === "MATCHED" ? "MATCHED" : undefined;
-    const pageResult = await this.store.transaction((tx) => tx.purchases(buyerTin, taxPeriod, wanted, page, pageSize));
-    return {
-      total: pageResult.total,
-      records: pageResult.records.map(purchaseRecord),
-    };
-  }
-
-  approve(buyerTin: string, taxPeriod: string, recordIds: string[]): Promise<ApprovalResult> {
-    return this.store.transaction((tx) => this.approveOn(tx, buyerTin, taxPeriod, recordIds));
   }
 
   hasInvoice(serialNumber: string): Promise<boolean> {
@@ -141,8 +99,6 @@ export class Ledger {
       vatCents: invoice.vatCents,
       totalCents: invoice.totalCents,
       vatRateBasisPoints: invoice.vatRateBasisPoints,
-      recordId: `REC-${await tx.allocateRecordId()}`,
-      approvalStatus: "PENDING_REVIEW",
       remainingVatCents: invoice.vatCents,
       clearedAt,
       response,
@@ -245,69 +201,6 @@ export class Ledger {
     await remember(tx, "adjustment", adjustment.supplier.tin, idempotencyKey, adjustment.hash, response);
     return response;
   }
-
-  private async approveOn(
-    tx: StoreTx,
-    buyerTin: string,
-    taxPeriod: string,
-    recordIds: string[],
-  ): Promise<ApprovalResult> {
-    for (const recordId of [...new Set(recordIds)].sort()) {
-      await tx.lock(`record:${recordId}`);
-    }
-
-    const seen = new Set<string>();
-    const failures: { record_id: string; message: string }[] = [];
-    let approved = 0;
-
-    for (const recordId of recordIds) {
-      if (seen.has(recordId)) {
-        failures.push({ record_id: recordId, message: "Record id is repeated in this batch" });
-        continue;
-      }
-      seen.add(recordId);
-      const invoice = await tx.invoiceByRecord(recordId);
-      if (!invoice || invoice.purchaserTin !== buyerTin) {
-        failures.push({ record_id: recordId, message: "Record was not found for this purchaser" });
-        continue;
-      }
-      if (invoice.invoiceDate.slice(0, 7) !== taxPeriod) {
-        failures.push({ record_id: recordId, message: `Record is outside tax period ${taxPeriod}` });
-        continue;
-      }
-      invoice.approvalStatus = "MATCHED";
-      await tx.saveInvoice(invoice);
-      approved += 1;
-    }
-
-    const failed = failures.length;
-    const stamp = timestamp().slice(0, 7).replace("-", "");
-    const result: ApprovalResult = {
-      status: failed === 0 ? "SUCCESS" : approved > 0 ? "PARTIAL" : "FAILED",
-      records_approved: approved,
-      records_failed: failed,
-      status_updated_to: "Matched",
-      approval_batch_reference: `BAT-${stamp}-${await tx.allocateBatchId()}`,
-    };
-    if (failures.length > 0) result.failures = failures;
-    return result;
-  }
-}
-
-function purchaseRecord(invoice: InvoiceRecord): PurchaseRecord {
-  return {
-    ramis_record_id: invoice.recordId,
-    supplier_tin: invoice.supplierTin,
-    supplier_name: invoice.supplierName,
-    supplier_invoice_serial: invoice.serialNumber,
-    invoice_date: invoice.invoiceDate,
-    supply_date: invoice.supplyDate,
-    value_excluding_vat: fromCents(invoice.netCents),
-    vat_amount: fromCents(invoice.vatCents),
-    total_consideration: fromCents(invoice.totalCents),
-    submission_timestamp: invoice.clearedAt,
-    approval_status: invoice.approvalStatus,
-  };
 }
 
 async function takeReplay<T extends ClearanceResponse | AdjustmentResponse>(

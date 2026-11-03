@@ -67,6 +67,21 @@ export type FieldMapping = {
   targetField: string;
 };
 
+export type ErpConnection = {
+  legalEntityId: RowId;
+  erpCode: string;
+  status: string;
+  connectedAt: string;
+};
+
+export type ErpFieldMapping = {
+  id: RowId;
+  erpCode: string;
+  schedule: string;
+  ramisField: string;
+  erpField: string;
+};
+
 export type RamisCredential = {
   legalEntityId: RowId;
   certificateSecretArn: string;
@@ -120,6 +135,8 @@ export type OutboundAdjustment = {
   originalSerialNumber: string;
   originalInvoiceDate: string;
   reason: string;
+  customerTin: string | null;
+  customerName: string | null;
   adjustmentDate: string;
   adjustedAmountExclusiveVat: string;
   adjustedVatAmount: string;

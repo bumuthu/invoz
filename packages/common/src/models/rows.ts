@@ -47,6 +47,21 @@ export type FieldMappingRow = {
   target_field: string;
 };
 
+export type ErpConnectionRow = {
+  legal_entity_id: RowId;
+  erp_code: string;
+  status: string;
+  connected_at: string;
+};
+
+export type ErpFieldMappingRow = {
+  id: RowId;
+  erp_code: string;
+  schedule: string;
+  ramis_field: string;
+  erp_field: string;
+};
+
 export type RamisCredentialRow = {
   legal_entity_id: RowId;
   certificate_secret_arn: string;
@@ -100,6 +115,8 @@ export type OutboundAdjustmentRow = {
   original_serial_number: string;
   original_invoice_date: string;
   reason: string;
+  customer_tin: string | null;
+  customer_name: string | null;
   adjustment_date: string;
   adjusted_amount_exclusive_vat: string;
   adjusted_vat_amount: string;
@@ -175,6 +192,8 @@ export type Tables = {
   branches: BranchRow;
   memberships: MembershipRow;
   field_mappings: FieldMappingRow;
+  erp_connections: ErpConnectionRow;
+  erp_field_mappings: ErpFieldMappingRow;
   ramis_credentials: RamisCredentialRow;
   serial_counters: SerialCounterRow;
   outbound_invoices: OutboundInvoiceRow;
@@ -193,6 +212,8 @@ export const tableColumns = {
   branches: ["id", "legal_entity_id", "code", "name", "created_at"],
   memberships: ["id", "user_id", "organization_id", "role", "created_at"],
   field_mappings: ["id", "legal_entity_id", "source_column", "target_field"],
+  erp_connections: ["legal_entity_id", "erp_code", "status", "connected_at"],
+  erp_field_mappings: ["id", "erp_code", "schedule", "ramis_field", "erp_field"],
   ramis_credentials: ["legal_entity_id", "certificate_secret_arn", "updated_at"],
   serial_counters: ["branch_id", "legal_entity_id", "period", "last_value"],
   outbound_invoices: [
@@ -234,6 +255,8 @@ export const tableColumns = {
     "original_serial_number",
     "original_invoice_date",
     "reason",
+    "customer_tin",
+    "customer_name",
     "adjustment_date",
     "adjusted_amount_exclusive_vat",
     "adjusted_vat_amount",

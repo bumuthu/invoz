@@ -271,8 +271,8 @@ export function skeletonKind(pathname: string) {
   if (pathname.startsWith("/subscription")) return "subscription";
   if (
     pathname.startsWith("/invoices") ||
+    pathname.startsWith("/schedules") ||
     pathname.startsWith("/exceptions") ||
-    pathname.startsWith("/schedule-02") ||
     pathname.startsWith("/users")
   ) {
     return "table";

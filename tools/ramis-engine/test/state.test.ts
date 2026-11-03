@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -15,8 +15,11 @@ import { sampleCreditNote, sampleInvoice } from "./payloads";
 
 test("a new engine instance reads clearance state from the database", async () => {
   const database = new PGlite();
-  const migration = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../migrations/0001_ledger.sql");
-  await database.exec(await readFile(migration, "utf8"));
+  const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../migrations");
+  const migrations = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort();
+  for (const name of migrations) {
+    await database.exec(await readFile(path.join(migrationsDir, name), "utf8"));
+  }
   const sql = pgliteSql(database);
   const first = await createApp(testSettings(), { store: new PostgresStore(sql) });
   const token = issueToken("104829102", "ramis-mock-secret", 3600).access_token;
@@ -41,18 +44,6 @@ test("a new engine instance reads clearance state from the database", async () =
   }));
   assert.equal(replay.status, 201);
   assert.equal((replay.body as { ramis_clearance_token: string }).ramis_clearance_token, clearance.ramis_clearance_token);
-
-  const purchases = await handleRequest(
-    second,
-    gateway("GET", "/api/v1/vat/schedule02/purchases", undefined, {
-      authorization: `Bearer ${token}`,
-      "x-client-tin": "709182341",
-    }, "tax_period=2026-10"),
-  );
-  assert.equal(purchases.status, 200);
-  const ledger = purchases.body as { total_records: number; records: { ramis_record_id: string }[] };
-  assert.equal(ledger.total_records, 1);
-  assert.equal(ledger.records[0]?.ramis_record_id, "REC-8849201");
 
   const tooLarge = sampleCreditNote();
   tooLarge.adjustment_values.adjusted_vat_amount = 200_000;

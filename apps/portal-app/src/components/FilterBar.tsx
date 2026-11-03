@@ -79,14 +79,10 @@ export default function FilterBar({
     const entityId = next.entityId ?? filters.entityId;
     const branch = next.branch ?? branchValue;
     const period = next.period ?? filters.period;
-    const schedule = next.schedule ?? filters.schedule;
-    const status = next.status ?? filters.status;
     if (org) params.set("org", org);
     if (entityId !== "all") params.set("entity", entityId);
     if (branch !== "all") params.set("branch", branch);
     if (period !== "all") params.set("period", period);
-    if (schedule !== "all") params.set("schedule", schedule);
-    if (status !== "all") params.set("status", status);
     const query = params.toString();
     router.push(query ? `${pathname}?${query}` : pathname);
   }
@@ -173,35 +169,6 @@ export default function FilterBar({
             {periodLabel(period)}
           </MenuItem>
         ))}
-      </TextField>
-      <TextField
-        select
-        size="small"
-        label="Schedule"
-        value={filters.schedule}
-        onChange={(event) => push({ schedule: event.target.value as PortalFilters["schedule"] })}
-        sx={fieldSx}
-        slotProps={selectSlotProps}
-      >
-        <MenuItem value="all">All schedules</MenuItem>
-        <MenuItem value="01">Schedule 01 sales</MenuItem>
-        <MenuItem value="02">Schedule 02 purchases</MenuItem>
-        <MenuItem value="04">Schedule 04 adjustments</MenuItem>
-      </TextField>
-      <TextField
-        select
-        size="small"
-        label="Status"
-        value={filters.status}
-        onChange={(event) => push({ status: event.target.value as PortalFilters["status"] })}
-        sx={fieldSx}
-        slotProps={selectSlotProps}
-      >
-        <MenuItem value="all">All</MenuItem>
-        <MenuItem value="Cleared">Cleared</MenuItem>
-        <MenuItem value="Submitting">Queued</MenuItem>
-        <MenuItem value="Rejected">Exceptions</MenuItem>
-        <MenuItem value="Skipped">Skipped</MenuItem>
       </TextField>
       </Stack>
       {account ? (
