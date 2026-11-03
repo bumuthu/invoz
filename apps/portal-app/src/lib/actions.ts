@@ -1,6 +1,3 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { portalRoles, type PortalRole } from "@invoz/common";
 import { prisma } from "@invoz/database";
@@ -70,7 +67,6 @@ export async function approveInbound(organizationId: string, ids: string[]): Pro
       detail: {},
     })),
   });
-  revalidatePath("/", "layout");
   return { ok: true, message: `Approved ${rows.length} purchase${rows.length === 1 ? "" : "s"}.` };
 }
 
@@ -101,7 +97,6 @@ export async function connectErp(organizationId: string, entityId: string, erpCo
       detail: { erp: erpCode },
     },
   });
-  revalidatePath("/", "layout");
   return { ok: true, message: "ERP connected for this legal entity." };
 }
 
@@ -170,7 +165,6 @@ export async function inviteMember(organizationId: string, emailInput: string, r
       detail: { email, role },
     },
   });
-  revalidatePath("/", "layout");
   return {
     ok: true,
     message: inviteUrl
@@ -339,7 +333,6 @@ async function queueDocument(
     const data = { ramis_status: "rejected" as const, error_message: message };
     if (source === "invoice") await prisma.outboundInvoice.update({ where: { id }, data });
     else await prisma.outboundAdjustment.update({ where: { id }, data });
-    revalidatePath("/", "layout");
     return { ok: false, error: message };
   }
   await prisma.auditLog.create({
@@ -352,7 +345,6 @@ async function queueDocument(
       detail: { changed },
     },
   });
-  revalidatePath("/", "layout");
   return { ok: true, message: "Document queued for resubmission." };
 }
 

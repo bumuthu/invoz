@@ -3,7 +3,7 @@
 import { notFound, useParams } from "next/navigation";
 import { useCallback } from "react";
 import PageData from "@/components/PageData";
-import { fetchScheduleDocuments, fetchSchedulePurchases } from "@/lib/portal-actions";
+import { fetchScheduleDocuments, fetchSchedulePurchases } from "@/lib/portal-client";
 import ScheduleView from "../../schedule-02/ScheduleView";
 import ScheduleDocuments from "./ScheduleDocuments";
 

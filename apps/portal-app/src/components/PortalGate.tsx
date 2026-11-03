@@ -8,8 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import AppLoading from "@/components/AppLoading";
 import AppShell from "@/components/AppShell";
 import Logo from "@/components/Logo";
-import { fetchShell } from "@/lib/portal-actions";
-import { clearOrganization } from "@/lib/portal-entry";
+import { clearOrganization, fetchShell, onPortalReload } from "@/lib/portal-client";
 
 type Shell = Awaited<ReturnType<typeof fetchShell>>;
 
@@ -17,10 +16,12 @@ export default function PortalGate({ children }: { children: ReactNode }) {
   const search = useSearchParams().toString();
   const [shell, setShell] = useState<Shell | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [generation, setGeneration] = useState(0);
+
+  useEffect(() => onPortalReload(() => setGeneration((current) => current + 1)), []);
 
   useEffect(() => {
     let cancelled = false;
-    setFailure(null);
     (async () => {
       try {
         const value = await fetchShell(search);
@@ -29,13 +30,14 @@ export default function PortalGate({ children }: { children: ReactNode }) {
         unstable_rethrow(error);
         if (!cancelled) {
           setFailure(error instanceof Error ? error.message : "The portal could not be loaded.");
+          setShell(null);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [search]);
+  }, [search, generation]);
 
   if (failure) {
     return (

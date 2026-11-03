@@ -9,7 +9,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { fetchIngestion } from "@/lib/portal-actions";
+import { fetchIngestion } from "@/lib/portal-client";
 
 export default function IngestionPage() {
   return (

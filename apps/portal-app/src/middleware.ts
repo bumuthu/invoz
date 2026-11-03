@@ -49,20 +49,21 @@ export async function middleware(request: NextRequest) {
   const user = data.user;
   const path = request.nextUrl.pathname;
   const isLogin = path === loginPath;
+  const isAuthApi = path.startsWith("/api/auth/");
   const hasError = Boolean(request.nextUrl.searchParams.get("error"));
   const orgSlug = readOrganizationCookie(request.cookies.get(organizationCookie)?.value);
 
   if (portalHost.kind === "default") {
     if (requireOrganizationHost()) {
-      if (!isLogin) return redirectWithSession(request, response, loginPath);
+      if (!isLogin && !isAuthApi) return redirectWithSession(request, response, loginPath);
       return response;
     }
-    if ((!user || !orgSlug) && !isLogin) return redirectWithSession(request, response, loginPath);
+    if ((!user || !orgSlug) && !isLogin && !isAuthApi) return redirectWithSession(request, response, loginPath);
     if (user && orgSlug && isLogin && !hasError) return redirectWithSession(request, response, "/");
     return response;
   }
 
-  if (!user && !isLogin) return redirectWithSession(request, response, loginPath);
+  if (!user && !isLogin && !isAuthApi) return redirectWithSession(request, response, loginPath);
   if (user && isLogin && !hasError) return redirectWithSession(request, response, "/");
   return response;
 }

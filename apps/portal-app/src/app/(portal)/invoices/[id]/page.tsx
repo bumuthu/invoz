@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback } from "react";
 import PageData from "@/components/PageData";
-import { fetchInvoice } from "@/lib/portal-actions";
+import { fetchInvoice } from "@/lib/portal-client";
 import InvoiceDetail from "./InvoiceDetail";
 
 export default function InvoicePage() {

@@ -6,7 +6,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { fetchBranches } from "@/lib/portal-actions";
+import { fetchBranches } from "@/lib/portal-client";
 
 export default function BranchesPage() {
   return (

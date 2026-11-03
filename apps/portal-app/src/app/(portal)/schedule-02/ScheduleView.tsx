@@ -13,11 +13,10 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
 import ScheduleDownload from "@/components/ScheduleDownload";
 import Stack from "@mui/material/Stack";
-import { approveInbound } from "@/lib/actions";
+import { approveInbound, reloadPortal } from "@/lib/portal-client";
 import type { ScheduleRow } from "@/lib/types";
 
 const matchLabel = {
@@ -41,7 +40,6 @@ export default function ScheduleView({
   organizationId: string;
   canApprove: boolean;
 }) {
-  const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -72,7 +70,7 @@ export default function ScheduleView({
                 }
                 setSelected([]);
                 setMessage({ tone: "success", text: result.message });
-                router.refresh();
+                reloadPortal();
               }}
             >
               Approve {selected.length} selected

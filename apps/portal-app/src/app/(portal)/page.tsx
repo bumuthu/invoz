@@ -10,7 +10,7 @@ import Link from "next/link";
 import InvoiceTable from "@/components/InvoiceTable";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { fetchOverview } from "@/lib/portal-actions";
+import { fetchOverview } from "@/lib/portal-client";
 
 export default function OverviewPage() {
   return (

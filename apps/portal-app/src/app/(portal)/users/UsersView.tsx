@@ -14,11 +14,10 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { portalRoleLabel, portalRoles, type PortalRole } from "@invoz/common";
 import Initials from "@/components/Initials";
 import PageHeader from "@/components/PageHeader";
-import { inviteMember } from "@/lib/actions";
+import { inviteMember, reloadPortal } from "@/lib/portal-client";
 import type { PortalUser } from "@/lib/types";
 
 const roles = portalRoles.filter((item) => item !== "owner");
@@ -32,7 +31,6 @@ export default function UsersView({
   organizationId: string;
   canInvite: boolean;
 }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<PortalRole>("viewer");
   const [pending, setPending] = useState(false);
@@ -95,7 +93,7 @@ export default function UsersView({
                 }
                 setEmail("");
                 setMessage({ tone: "success", text: result.message, link: result.inviteUrl });
-                router.refresh();
+                reloadPortal();
               }}
             >
               Invite

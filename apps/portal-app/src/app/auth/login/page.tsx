@@ -1,42 +1,11 @@
-import { cookies, headers } from "next/headers";
+import { Suspense } from "react";
+import AppLoading from "@/components/AppLoading";
 import LoginForm from "./LoginForm";
-import {
-  classifyHost,
-  hostnameFrom,
-  organizationCookie,
-  portalRootDomain,
-  readOrganizationCookie,
-} from "@/lib/host";
-import { clearOrganization, openOrganization } from "@/lib/portal-entry";
-import { sessionSupabase } from "@/lib/session";
 
-export const dynamic = "force-dynamic";
-
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const params = await searchParams;
-  const headerList = await headers();
-  const hostname = hostnameFrom(headerList.get("x-portal-host") ?? headerList.get("host"));
-  const portalHost = classifyHost(hostname);
-  const session = await sessionSupabase();
-  const {
-    data: { user },
-  } = await session.auth.getUser();
-  const remembered = readOrganizationCookie((await cookies()).get(organizationCookie)?.value) ?? "";
-  const root = portalRootDomain(hostname);
-
+export default function LoginPage() {
   return (
-    <LoginForm
-      hostLabel={portalHost.kind === "organization" ? `${portalHost.slug}.${root}` : hostname}
-      organizationSlug={portalHost.kind === "organization" ? portalHost.slug : remembered}
-      lockOrganization={portalHost.kind === "organization"}
-      signedInEmail={user?.email ?? ""}
-      error={params.error}
-      openOrganization={openOrganization}
-      clearOrganization={clearOrganization}
-    />
+    <Suspense fallback={<AppLoading />}>
+      <LoginForm />
+    </Suspense>
   );
 }

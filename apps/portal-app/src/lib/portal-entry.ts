@@ -1,5 +1,3 @@
-"use server";
-
 import { cookies, headers } from "next/headers";
 import { isOrganizationSlug } from "@invoz/common";
 import { prisma } from "@invoz/database";

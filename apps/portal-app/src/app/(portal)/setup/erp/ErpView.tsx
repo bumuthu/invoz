@@ -9,9 +9,8 @@ import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
-import { connectErp } from "@/lib/actions";
+import { connectErp, reloadPortal } from "@/lib/portal-client";
 import type { ErpConnectionView, ErpOption } from "@/lib/types";
 
 export default function ErpView({
@@ -29,7 +28,6 @@ export default function ErpView({
   entityId: string | null;
   canConnect: boolean;
 }) {
-  const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const connectedCodes = new Set(connections.map((item) => item.code));
@@ -45,7 +43,7 @@ export default function ErpView({
       return;
     }
     setMessage({ tone: "success", text: result.message });
-    router.refresh();
+    reloadPortal();
   }
 
   return (

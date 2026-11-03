@@ -11,7 +11,7 @@ import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { fetchAudit } from "@/lib/portal-actions";
+import { fetchAudit } from "@/lib/portal-client";
 
 export default function AuditPage() {
   return (

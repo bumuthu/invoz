@@ -1,7 +1,7 @@
 "use client";
 
 import PageData from "@/components/PageData";
-import { fetchUsers } from "@/lib/portal-actions";
+import { fetchUsers } from "@/lib/portal-client";
 import UsersView from "./UsersView";
 
 export default function UsersPage() {

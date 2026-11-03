@@ -7,38 +7,53 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { isOrganizationSlug } from "@invoz/common";
+import AppLoading from "@/components/AppLoading";
 import Logo from "@/components/Logo";
+import { clearOrganization, fetchLoginContext, openOrganization, type LoginContext } from "@/lib/portal-client";
 import { browserSupabase } from "@/lib/supabase-browser";
 
-export default function LoginForm({
-  hostLabel,
-  organizationSlug,
-  lockOrganization,
-  signedInEmail,
-  error,
-  openOrganization,
-  clearOrganization,
-}: {
-  hostLabel: string;
-  organizationSlug: string;
-  lockOrganization: boolean;
-  signedInEmail: string;
-  error?: string;
-  openOrganization: (
-    slug: string,
-  ) => Promise<{ ok: true; href: string } | { ok: false; error: string }>;
-  clearOrganization: () => Promise<void>;
-}) {
+export default function LoginForm() {
   const router = useRouter();
-  const [organization, setOrganization] = useState(organizationSlug);
+  const error = useSearchParams().get("error") ?? undefined;
+  const [context, setContext] = useState<LoginContext | null>(null);
+  const [contextError, setContextError] = useState("");
+  const [organization, setOrganization] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [useAnotherAccount, setUseAnotherAccount] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const value = await fetchLoginContext();
+        if (cancelled) return;
+        setContext(value);
+        setOrganization(value.organizationSlug);
+      } catch (caught) {
+        if (!cancelled) setContextError(caught instanceof Error ? caught.message : "Sign in could not be loaded.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (contextError) {
+    return (
+      <Box sx={{ minHeight: "100vh", display: "grid", placeItems: "center", px: 3 }}>
+        <Typography color="text.secondary">{contextError}</Typography>
+      </Box>
+    );
+  }
+  if (!context) return <AppLoading />;
+
+  const { hostLabel, organizationSlug, lockOrganization, signedInEmail } = context;
   const alreadySignedIn = Boolean(signedInEmail) && !useAnotherAccount;
 
   return (

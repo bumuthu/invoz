@@ -1,7 +1,7 @@
 "use client";
 
 import PageData from "@/components/PageData";
-import { fetchErp } from "@/lib/portal-actions";
+import { fetchErp } from "@/lib/portal-client";
 import ErpView from "./ErpView";
 
 export default function ErpPage() {

@@ -8,7 +8,7 @@ import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
 import PrintButton from "@/components/PrintButton";
 import { describePeriod } from "@/lib/documents";
-import { fetchStatement } from "@/lib/portal-actions";
+import { fetchStatement } from "@/lib/portal-client";
 
 export default function StatementPage() {
   return (

@@ -5,8 +5,7 @@ import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { correctAndResubmit } from "@/lib/actions";
+import { correctAndResubmit, reloadPortal } from "@/lib/portal-client";
 import type { Invoice } from "@/lib/types";
 
 export default function CorrectDocument({
@@ -16,7 +15,6 @@ export default function CorrectDocument({
   invoice: Invoice;
   organizationId: string;
 }) {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const note = invoice.source === "adjustment";
@@ -88,11 +86,11 @@ export default function CorrectDocument({
           setPending(false);
           if (!result.ok) {
             setMessage({ tone: "error", text: result.error });
-            router.refresh();
+            reloadPortal();
             return;
           }
           setMessage({ tone: "success", text: result.message });
-          router.refresh();
+          reloadPortal();
         }}
       >
         Save and resubmit

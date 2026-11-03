@@ -7,7 +7,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import PageData from "@/components/PageData";
 import PageHeader from "@/components/PageHeader";
-import { fetchSubscription } from "@/lib/portal-actions";
+import { fetchSubscription } from "@/lib/portal-client";
 
 const count = new Intl.NumberFormat("en-US");
 

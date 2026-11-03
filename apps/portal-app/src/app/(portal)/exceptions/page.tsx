@@ -1,7 +1,7 @@
 "use client";
 
 import PageData from "@/components/PageData";
-import { fetchExceptions } from "@/lib/portal-actions";
+import { fetchExceptions } from "@/lib/portal-client";
 import ExceptionsView from "./ExceptionsView";
 
 export default function ExceptionsPage() {
