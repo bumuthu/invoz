@@ -49,7 +49,7 @@ Each Lambda takes its environment from the `.env` in its package. `tools/deploym
 
 | Package | Deploy command |
 | --- | --- |
-| `packages/invoice-engine/.env` | `npm run provision:lambda` |
+| `packages/invoice-engine/.env` | `npm run provision:lambda -w @invoz/deployment` |
 | `tools/ramis-engine/.env` | `npm run provision:ramis` |
 | `packages/landing-service/.env` | `npm run provision:landing` |
 | `packages/erp-poll/.env` | `npm run provision:erp-poll-lambda -w @invoz/deployment` |
@@ -158,7 +158,7 @@ aws lambda list-event-source-mappings \
 
 The role can read and write the shared invoice bucket, consume the work queue, and read Secrets Manager secrets named `invoz-${APP_ENV}/*`. This step does not create a secret.
 
-The worker environment is `packages/invoice-engine/.env`. `DATABASE_URL` is the clearance transaction. `RAMIS_API_URL` and `RAMIS_CLIENT_SECRET` are the RAMIS call. If either value changes after step 6, run `npm run provision:lambda` again. That publish also creates alarm `invoz-${APP_ENV}-invoice-engine-ramis-commit-failed` on metric `Invoz/InvoiceEngine` `RamisClearedCommitFailed`, and sends it to SNS topic `invoz-${APP_ENV}-critical`. The topic is created by this command. It has no email subscription until you add one.
+The worker environment is `packages/invoice-engine/.env`. `DATABASE_URL` is the clearance transaction, and it must be the session pooler on port 5432. The direct `db.{ref}.supabase.co` host is IPv6-only, so Lambda cannot open it. `RAMIS_API_URL` and `RAMIS_CLIENT_SECRET` are the RAMIS call. If either value changes after step 6, source `tools/deployment/.env` again and run `npm run provision:lambda -w @invoz/deployment`. That publish also creates alarm `invoz-${APP_ENV}-invoice-engine-ramis-commit-failed` on metric `Invoz/InvoiceEngine` `RamisClearedCommitFailed`, and sends it to SNS topic `invoz-${APP_ENV}-critical`. The topic is created by this command. It has no email subscription until you add one.
 
 ## 5. EventBridge
 

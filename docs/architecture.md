@@ -230,9 +230,22 @@ Run the same environment and slug again to add a row that was missing. It does n
 | `npm run sync:invoices -- stag <slug>` | Uploads `tools/invoice-uploader/invoices/stag/<slug>/` with that env file |
 | `npm run dev:ramis` | RAMIS engine on port 8090 |
 | `npm run test:ramis` | RAMIS engine tests |
-| `npm run provision` | `tools/deployment/provision.sh` |
-| `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
-| `npm run provision:erp-poll-lambda -w @invoz/deployment` | Publishes `invoz-{env}-erp-poll-s4hana` |
+| `npm run provision` | S3, SQS, the invoice-engine Lambda, and EventBridge |
+| `npm run provision:lambda -w @invoz/deployment` | Publishes `invoz-{env}-invoice-engine` from `packages/invoice-engine/.env` |
+| `npm run provision:ramis` | Publishes `invoz-{env}-ramis-engine` from `tools/ramis-engine/.env` |
+| `npm run provision:landing` | Publishes `invoz-{env}-landing-service` from `packages/landing-service/.env` |
+| `npm run provision:erp-poll-lambda -w @invoz/deployment` | Publishes `invoz-{env}-erp-poll-s4hana` from `packages/erp-poll/.env` |
 | `npm run provision:erp-poll-schedule -w @invoz/deployment` | EventBridge `rate(1 minute)` for that function |
 
-`npm run migrate` and `npm run seed -- <stag|prod>` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `PORTAL_REQUIRE_ORG_HOST`). The portal root is `app.invoz.lk` in production and `app-stag.invoz.lk` on staging, in `apps/portal-app/src/lib/host.ts`. `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. The RAMIS and landing publishes also read `API_CERTIFICATE_ARN` from that file. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, `packages/landing-service/.env`, and `packages/erp-poll/.env`.
+`npm run migrate` and `npm run seed -- <stag|prod>` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `PORTAL_REQUIRE_ORG_HOST`). The portal root is `app.invoz.lk` in production and `app-stag.invoz.lk` on staging, in `apps/portal-app/src/lib/host.ts`. `packages/landing-service/.env` needs `DATABASE_URL` for demo requests.
+
+The provision scripts do not load `tools/deployment/.env`. Source it first so `APP_ENV` (`stag` or `prod`), `AWS_REGION`, and `API_CERTIFICATE_ARN` are in the shell. `npm run onboard:sftp` is the exception: it loads that file when `APP_ENV` is unset, then checks that it matches the `stag` or `prod` argument. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function. A Lambda `DATABASE_URL` or `RAMIS_DATABASE_URL` is the session pooler on port 5432 (`aws-0-{region}.pooler.supabase.com`). The direct `db.{ref}.supabase.co` host is IPv6-only, so Lambda cannot open it.
+
+```bash
+set -a
+source tools/deployment/.env
+set +a
+npm run provision:lambda -w @invoz/deployment
+npm run provision:landing
+npm run provision:ramis
+```

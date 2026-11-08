@@ -17,8 +17,8 @@ export default function AppLoading() {
       }}
     >
       <Stack spacing={2.5} sx={{ alignItems: "center" }}>
-        <Logo height={36} />
         <CircularProgress size={28} thickness={4} aria-hidden />
+        <Logo height={36} />
       </Stack>
     </Box>
   );
