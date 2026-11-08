@@ -1,78 +1,91 @@
 #!/usr/bin/env bash
-# Create one SFTP password for an organization. The login is chrooted to
-# uploads/{organization_id}/ in the shared invoice bucket.
+# Create one SFTP password for an organization slug. The login is chrooted to
+# uploads/{organization_id}/ in the shared invoice bucket. The slug is the
+# folder under supabase/seeders/<stag|prod>. The numeric id comes from that
+# organization. The password hash is stored in sftp_credentials. The identity
+# provider reads it from the database.
 set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-if [[ -z "${APP_ENV:-}" && -f "$DIR/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$DIR/.env"
-  set +a
-fi
-source "$DIR/lib.sh"
-require_aws
-
-IDP_FUNCTION="$(aws_name sftp-idp)"
-IDP_ROLE="${IDP_FUNCTION}-role"
-SECRET_PREFIX="invoz-${APP_ENV}/sftp/"
-SERVER_PARAMETER="/invoz/${APP_ENV}/transfer-server-id"
 
 usage() {
-  echo "Usage: npm run onboard:sftp -- <organization id>" >&2
-  echo "       npm run onboard:sftp -- --from supabase/onboarding/<slug>.result.json" >&2
+  echo "Usage: npm run onboard:sftp -- <stag|prod> <organization slug>" >&2
   echo "       add --rotate to replace an existing password" >&2
 }
 
 ROTATE=0
-FROM=""
-ORG_ID="${ORGANIZATION_ID:-}"
+ENV=""
+SLUG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --rotate)
       ROTATE=1
       shift
       ;;
-    --from)
-      FROM="${2:-}"
-      if [[ -z "$FROM" ]]; then
-        usage
-        exit 1
-      fi
-      shift 2
-      ;;
     --help)
       usage
       exit 0
       ;;
     *)
-      ORG_ID="$1"
+      if [[ -z "$ENV" ]]; then
+        ENV="$1"
+      elif [[ -z "$SLUG" ]]; then
+        SLUG="$1"
+      else
+        usage
+        exit 1
+      fi
       shift
       ;;
   esac
 done
 
-resolve_from() {
-  if [[ -f "$1" ]]; then
-    printf '%s\n' "$1"
-    return
-  fi
-  if [[ -f "$REPO_ROOT/$1" ]]; then
-    printf '%s\n' "$REPO_ROOT/$1"
-    return
-  fi
-  echo "onboarding result not found: $1" >&2
+if [[ ! "$ENV" =~ ^(stag|prod)$ || -z "$SLUG" ]]; then
+  usage
+  echo "pass stag or prod, then the organization slug from supabase/seeders/<env>/<slug>" >&2
   exit 1
-}
-
-if [[ -n "$FROM" ]]; then
-  FROM=$(resolve_from "$FROM")
-  ORG_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["organization_id"])' "$FROM")
 fi
 
-if [[ ! "$ORG_ID" =~ ^[0-9]+$ ]]; then
+if [[ -z "${APP_ENV:-}" && -f "$DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$DIR/.env"
+  set +a
+fi
+if [[ -n "${APP_ENV:-}" && "$APP_ENV" != "$ENV" ]]; then
+  echo "APP_ENV is ${APP_ENV} and the command is ${ENV}. Use the same environment." >&2
+  exit 1
+fi
+export APP_ENV="$ENV"
+
+source "$DIR/lib.sh"
+require_aws
+
+IDP_FUNCTION="$(aws_name sftp-idp)"
+IDP_ROLE="${IDP_FUNCTION}-role"
+SECRET_NAME_PREFIX="invoz-${APP_ENV}/sftp/"
+SERVER_PARAMETER="/invoz/${APP_ENV}/transfer-server-id"
+
+if [[ ! "$SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
   usage
-  echo "organization id must be the numeric id from npm run onboard" >&2
+  echo "pass the organization slug from supabase/seeders/${ENV}/<slug>" >&2
+  exit 1
+fi
+
+SEED_DIR="$REPO_ROOT/supabase/seeders/$ENV/$SLUG"
+if [[ ! -d "$SEED_DIR" || ! -f "$SEED_DIR/owner.json" ]]; then
+  echo "seeder not found: supabase/seeders/$ENV/$SLUG" >&2
+  exit 1
+fi
+
+if ! ORG_ID=$(
+  cd "$REPO_ROOT/supabase" &&
+  node --env-file=.env --import tsx scripts/organization-id.ts "$ENV" "$SLUG"
+); then
+  exit 1
+fi
+if [[ ! "$ORG_ID" =~ ^[0-9]+$ ]]; then
+  echo "organization $SLUG has no numeric id. Run npm run onboard -- $ENV $SLUG" >&2
   exit 1
 fi
 
@@ -157,30 +170,81 @@ EOF
     --role-name "$IDP_ROLE" \
     --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-  cat >"$BUILD_DIR/sftp-idp-secrets.json" <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "secretsmanager:GetSecretValue",
-      "Resource": "arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:${SECRET_PREFIX}*"
-    }
-  ]
-}
-EOF
-  aws iam put-role-policy \
+  aws iam delete-role-policy \
     --role-name "$IDP_ROLE" \
     --policy-name "${IDP_FUNCTION}-secrets" \
-    --policy-document "file://$BUILD_DIR/sftp-idp-secrets.json"
+    >/dev/null 2>&1 || true
+}
+
+load_database_url() {
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    return
+  fi
+  local env_file="$REPO_ROOT/supabase/.env"
+  if [[ ! -f "$env_file" ]]; then
+    echo "supabase/.env is missing DATABASE_URL" >&2
+    exit 1
+  fi
+  DATABASE_URL=$(ENV_PATH="$env_file" AWS_REGION="$REGION" python3 - <<'PY'
+import os
+from pathlib import Path
+from urllib.parse import quote, urlparse
+
+value = ""
+for raw in Path(os.environ["ENV_PATH"]).read_text().splitlines():
+    line = raw.strip()
+    if line.startswith("export "):
+        line = line[len("export "):].strip()
+    if not line.startswith("DATABASE_URL="):
+        continue
+    value = line.split("=", 1)[1].strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1]
+    break
+url = urlparse(value)
+host = url.hostname or ""
+if host.startswith("db.") and host.endswith(".supabase.co"):
+    ref = host[len("db."):-len(".supabase.co")]
+    region = os.environ.get("AWS_REGION") or "ap-south-1"
+    user = quote(f"postgres.{ref}", safe="")
+    password = quote(url.password or "", safe="")
+    value = f"postgresql://{user}:{password}@aws-0-{region}.pooler.supabase.com:5432{url.path or '/postgres'}"
+if value:
+    print(value)
+PY
+)
+  if [[ -z "$DATABASE_URL" ]]; then
+    echo "DATABASE_URL is missing from supabase/.env" >&2
+    exit 1
+  fi
 }
 
 publish_idp() {
-  cp "$DIR/sftp_idp.py" "$BUILD_DIR/sftp_idp.py"
+  local package="$BUILD_DIR/sftp-idp-pkg"
+  rm -rf "$package"
+  mkdir -p "$package"
+  python3 -m pip install --quiet --target "$package" pg8000
+  cp "$DIR/sftp_idp.py" "$package/sftp_idp.py"
   rm -f "$BUILD_DIR/sftp-idp.zip"
-  (cd "$BUILD_DIR" && zip -q sftp-idp.zip sftp_idp.py)
+  (cd "$package" && zip -qr "$BUILD_DIR/sftp-idp.zip" .)
   local arn="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${IDP_FUNCTION}"
   local role_arn="arn:aws:iam::${ACCOUNT_ID}:role/${IDP_ROLE}"
+  local transfer_role_arn="arn:aws:iam::${ACCOUNT_ID}:role/${TRANSFER_ROLE}"
+  DATABASE_URL="$DATABASE_URL" \
+  TRANSFER_ROLE_ARN="$transfer_role_arn" \
+  INVOICE_BUCKET="$INVOICE_BUCKET" \
+  ENV_FILE="$BUILD_DIR/sftp-idp-env.json" \
+  python3 - <<'PY'
+import json, os
+from pathlib import Path
+Path(os.environ["ENV_FILE"]).write_text(json.dumps({
+    "Variables": {
+        "DATABASE_URL": os.environ["DATABASE_URL"],
+        "TRANSFER_ROLE_ARN": os.environ["TRANSFER_ROLE_ARN"],
+        "INVOICE_BUCKET": os.environ["INVOICE_BUCKET"],
+    }
+}))
+PY
 
   if aws lambda get-function --function-name "$IDP_FUNCTION" --region "$REGION" >/dev/null 2>&1; then
     aws lambda update-function-code \
@@ -192,33 +256,22 @@ publish_idp() {
     aws lambda update-function-configuration \
       --function-name "$IDP_FUNCTION" \
       --region "$REGION" \
-      --environment "Variables={SECRET_PREFIX=${SECRET_PREFIX}}" \
+      --environment "file://$BUILD_DIR/sftp-idp-env.json" \
       >/dev/null
     aws lambda wait function-updated --function-name "$IDP_FUNCTION" --region "$REGION"
     echo "updated lambda $IDP_FUNCTION" >&2
   else
-    local attempt
-    for attempt in 1 2 3 4 5 6; do
-      if aws lambda create-function \
-        --function-name "$IDP_FUNCTION" \
-        --region "$REGION" \
-        --runtime python3.12 \
-        --handler sftp_idp.handler \
-        --role "$role_arn" \
-        --timeout 10 \
-        --memory-size 128 \
-        --zip-file "fileb://$BUILD_DIR/sftp-idp.zip" \
-        --environment "Variables={SECRET_PREFIX=${SECRET_PREFIX}}" \
-        >/dev/null; then
-        echo "created lambda $IDP_FUNCTION" >&2
-        break
-      fi
-      if [[ "$attempt" -eq 6 ]]; then
-        echo "could not create $IDP_FUNCTION" >&2
-        return 1
-      fi
-      sleep 5
-    done
+    retry_iam aws lambda create-function \
+      --function-name "$IDP_FUNCTION" \
+      --region "$REGION" \
+      --runtime python3.12 \
+      --handler sftp_idp.handler \
+      --role "$role_arn" \
+      --timeout 10 \
+      --memory-size 128 \
+      --zip-file "fileb://$BUILD_DIR/sftp-idp.zip" \
+      --environment "file://$BUILD_DIR/sftp-idp-env.json"
+    echo "created lambda $IDP_FUNCTION" >&2
     aws lambda wait function-active --function-name "$IDP_FUNCTION" --region "$REGION"
   fi
 
@@ -293,90 +346,88 @@ ensure_server() {
   return 1
 }
 
-write_secret() {
-  local secret_name="$1"
-  local password="$2"
-  local role_arn="arn:aws:iam::${ACCOUNT_ID}:role/${TRANSFER_ROLE}"
-  SECRET_NAME="$secret_name" \
-  SFTP_PASSWORD="$password" \
-  ROLE_ARN="$role_arn" \
-  BUCKET="$INVOICE_BUCKET" \
-  ORG_ID="$ORG_ID" \
-  SECRET_FILE="$BUILD_DIR/sftp-secret.json" \
-  python3 - <<'PY'
-import hashlib, json, os, secrets
-password = os.environ["SFTP_PASSWORD"]
-salt = secrets.token_bytes(16)
-digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
-org_id = os.environ["ORG_ID"]
-bucket = os.environ["BUCKET"]
-policy = {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": ["s3:ListBucket"],
-            "Resource": f"arn:aws:s3:::{bucket}",
-            "Condition": {"StringLike": {"s3:prefix": [f"uploads/{org_id}", f"uploads/{org_id}/*"]}},
-        },
-        {"Effect": "Allow", "Action": "s3:GetBucketLocation", "Resource": f"arn:aws:s3:::{bucket}"},
-        {
-            "Effect": "Allow",
-            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:GetObjectVersion"],
-            "Resource": f"arn:aws:s3:::{bucket}/uploads/{org_id}/*",
-        },
-    ],
-}
-body = {
-    "PasswordHash": f"{salt.hex()}:{digest.hex()}",
-    "Role": os.environ["ROLE_ARN"],
-    "HomeDirectoryType": "LOGICAL",
-    "HomeDirectoryDetails": json.dumps([{"Entry": "/", "Target": f"/{bucket}/uploads/{org_id}"}]),
-    "Policy": json.dumps(policy),
-}
-with open(os.environ["SECRET_FILE"], "w", encoding="utf-8") as handle:
-    json.dump(body, handle)
+write_uploader_env() {
+  local host="$1"
+  local user="$2"
+  local password="$3"
+  local dest="$REPO_ROOT/tools/invoice-uploader/sftp/${SLUG}.env"
+  mkdir -p "$(dirname "$dest")"
+  SFTP_ENV="$dest" SFTP_HOST="$host" SFTP_USER="$user" SFTP_PASSWORD="$password" python3 - <<'PY'
+import os
+path = os.environ["SFTP_ENV"]
+body = "\n".join([
+    f"SFTP_HOST={os.environ['SFTP_HOST']}",
+    f"SFTP_USERNAME={os.environ['SFTP_USER']}",
+    f"SFTP_PASSWORD={os.environ['SFTP_PASSWORD']}",
+    "",
+])
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(body)
+os.chmod(path, 0o600)
 PY
-
-  if aws secretsmanager describe-secret --secret-id "$secret_name" --region "$REGION" >/dev/null 2>&1; then
-    aws secretsmanager put-secret-value \
-      --secret-id "$secret_name" \
-      --region "$REGION" \
-      --secret-string "file://$BUILD_DIR/sftp-secret.json" \
-      >/dev/null
-  else
-    aws secretsmanager create-secret \
-      --name "$secret_name" \
-      --region "$REGION" \
-      --secret-string "file://$BUILD_DIR/sftp-secret.json" \
-      >/dev/null
-  fi
-  rm -f "$BUILD_DIR/sftp-secret.json"
 }
 
 remember_password() {
   local host="$1"
   local password="$2"
-  if [[ -z "$FROM" ]]; then
-    return
-  fi
-  FROM_PATH="$FROM" SFTP_HOST="$host" SFTP_USER="$ORG_ID" SFTP_PASSWORD="$password" python3 - <<'PY'
+  local config="$SEED_DIR/sftp.json"
+  SFTP_CONFIG="$config" SFTP_HOST="$host" SFTP_USER="$ORG_ID" SFTP_PASSWORD="$password" python3 - <<'PY'
 import json, os
-path = os.environ["FROM_PATH"]
-with open(path, encoding="utf-8") as handle:
-    document = json.load(handle)
-document["sftp_host"] = os.environ["SFTP_HOST"]
-document["sftp_username"] = os.environ["SFTP_USER"]
-document["sftp_password"] = os.environ["SFTP_PASSWORD"]
+path = os.environ["SFTP_CONFIG"]
+body = {
+    "host": os.environ["SFTP_HOST"],
+    "username": os.environ["SFTP_USER"],
+    "password": os.environ["SFTP_PASSWORD"],
+}
 with open(path, "w", encoding="utf-8") as handle:
-    json.dump(document, handle, indent=2)
+    json.dump(body, handle, indent=2)
     handle.write("\n")
 os.chmod(path, 0o600)
 PY
+  write_uploader_env "$host" "$ORG_ID" "$password"
 }
 
-SECRET_NAME="${SECRET_PREFIX}${ORG_ID}"
-if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region "$REGION" >/dev/null 2>&1 && [[ "$ROTATE" -eq 0 ]]; then
+credential_exists() {
+  if (
+    cd "$REPO_ROOT/supabase" &&
+    node --env-file=.env --import tsx scripts/sftp-credential.ts exists "$ORG_ID"
+  ); then
+    return 0
+  fi
+  return 1
+}
+
+save_credential() {
+  (
+    cd "$REPO_ROOT/supabase" &&
+    SFTP_PASSWORD="$1" node --env-file=.env --import tsx scripts/sftp-credential.ts save "$ORG_ID"
+  )
+}
+
+remove_secrets_manager_secret() {
+  local secret_name="${SECRET_NAME_PREFIX}${ORG_ID}"
+  if aws secretsmanager describe-secret --secret-id "$secret_name" --region "$REGION" >/dev/null 2>&1; then
+    aws secretsmanager delete-secret \
+      --secret-id "$secret_name" \
+      --region "$REGION" \
+      --force-delete-without-recovery \
+      >/dev/null
+    echo "removed secrets manager secret ${secret_name}" >&2
+  fi
+}
+
+load_database_url
+
+DB_EXISTS=0
+if credential_exists; then
+  DB_EXISTS=1
+fi
+SM_EXISTS=0
+if aws secretsmanager describe-secret --secret-id "${SECRET_NAME_PREFIX}${ORG_ID}" --region "$REGION" >/dev/null 2>&1; then
+  SM_EXISTS=1
+fi
+
+if [[ "$DB_EXISTS" -eq 1 && "$ROTATE" -eq 0 && "$SM_EXISTS" -eq 0 ]]; then
   EXISTING_SERVER=$(aws ssm get-parameter \
     --name "$SERVER_PARAMETER" \
     --region "$REGION" \
@@ -387,15 +438,58 @@ if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region "$REGI
   fi
   echo "username ${ORG_ID}"
   echo "sftp user ${ORG_ID} already exists. Run with --rotate to replace the password."
+  if [[ -f "$SEED_DIR/sftp.json" ]]; then
+    parsed=$(SFTP_CONFIG="$SEED_DIR/sftp.json" python3 - <<'PY'
+import json, os
+document = json.load(open(os.environ["SFTP_CONFIG"], encoding="utf-8"))
+host = document.get("host") or ""
+user = document.get("username") or ""
+password = document.get("password") or ""
+if host and user and password:
+    print(host)
+    print(user)
+    print(password)
+PY
+)
+    if [[ -n "$parsed" ]]; then
+      write_uploader_env \
+        "$(printf '%s\n' "$parsed" | sed -n '1p')" \
+        "$(printf '%s\n' "$parsed" | sed -n '2p')" \
+        "$(printf '%s\n' "$parsed" | sed -n '3p')"
+      echo "sftp env tools/invoice-uploader/sftp/${SLUG}.env"
+    fi
+  fi
   exit 0
 fi
 
 ensure_transfer_role
 ensure_idp_role
+
+if [[ "$DB_EXISTS" -eq 0 || "$ROTATE" -eq 1 ]]; then
+  PASSWORD=""
+  if [[ "$ROTATE" -eq 0 && -f "$SEED_DIR/sftp.json" ]]; then
+    PASSWORD=$(SFTP_CONFIG="$SEED_DIR/sftp.json" python3 - <<'PY'
+import json, os
+print(json.load(open(os.environ["SFTP_CONFIG"], encoding="utf-8")).get("password") or "")
+PY
+)
+  fi
+  if [[ -z "$PASSWORD" ]]; then
+    PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')
+  fi
+  save_credential "$PASSWORD"
+fi
+
 publish_idp
 ensure_server
-PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')
-write_secret "$SECRET_NAME" "$PASSWORD"
+
+if [[ "$DB_EXISTS" -eq 0 || "$ROTATE" -eq 1 ]]; then
+  HOST="${SERVER_ID}.server.transfer.${REGION}.amazonaws.com"
+  remember_password "$HOST" "$PASSWORD"
+  echo "password ${PASSWORD}"
+fi
+
+remove_secrets_manager_secret
 
 : >"$BUILD_DIR/empty"
 aws s3api put-object \
@@ -405,19 +499,13 @@ aws s3api put-object \
   >/dev/null
 
 HOST="${SERVER_ID}.server.transfer.${REGION}.amazonaws.com"
-remember_password "$HOST" "$PASSWORD"
-
 echo "sftp host ${HOST}"
 echo "username ${ORG_ID}"
-echo "password ${PASSWORD}"
 echo "folder uploads/${ORG_ID}/"
 echo "upload /{legal_entity_id}/{branch_id}/inbound/{file}.csv"
-if [[ -n "$FROM" ]]; then
-  python3 -c '
-import json, sys
-document = json.load(open(sys.argv[1]))
-for entity in document.get("legal_entities", []):
-    for branch in entity.get("branches", []):
-        print(f"example /{entity[\"id\"]}/{branch[\"id\"]}/inbound/invoice.csv")
-' "$FROM"
-fi
+echo "sftp config supabase/seeders/${ENV}/${SLUG}/sftp.json"
+echo "sftp env tools/invoice-uploader/sftp/${SLUG}.env"
+(
+  cd "$REPO_ROOT/supabase" &&
+  node --env-file=.env --import tsx scripts/organization-id.ts --examples "$ENV" "$SLUG"
+)

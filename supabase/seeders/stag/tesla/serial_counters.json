@@ -1,0 +1,40 @@
+{
+  "serial_counters": [
+    {
+      "branch_id": "tesla-branch-cmb",
+      "legal_entity_id": "tesla-entity",
+      "period": "26OCT",
+      "last_value": 42
+    },
+    {
+      "branch_id": "tesla-branch-kdy",
+      "legal_entity_id": "tesla-entity",
+      "period": "26OCT",
+      "last_value": 18
+    },
+    {
+      "branch_id": "tesla-branch-ho",
+      "legal_entity_id": "tesla-entity",
+      "period": "26OCT",
+      "last_value": 6
+    },
+    {
+      "branch_id": "tesla-energy-branch-cmb",
+      "legal_entity_id": "tesla-energy",
+      "period": "26OCT",
+      "last_value": 42
+    },
+    {
+      "branch_id": "tesla-energy-branch-kdy",
+      "legal_entity_id": "tesla-energy",
+      "period": "26OCT",
+      "last_value": 18
+    },
+    {
+      "branch_id": "tesla-energy-branch-ho",
+      "legal_entity_id": "tesla-energy",
+      "period": "26OCT",
+      "last_value": 6
+    }
+  ]
+}

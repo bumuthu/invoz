@@ -17,53 +17,56 @@ const schedules = [
 ] as const;
 
 export default function MappingView({
-  connection,
+  connections,
   rows,
   entitySelected,
 }: {
-  connection: ErpConnectionView | null;
+  connections: ErpConnectionView[];
   rows: ScheduleMapRow[];
   entitySelected: boolean;
 }) {
+  const erps = [...new Map(connections.map((item) => [item.code, item])).values()];
   return (
     <>
       <PageHeader
         title="Field mapping"
         description={
-          connection
-            ? `${connection.name} fields beside the RAMIS paths. This map is read only.`
-            : "RAMIS paths for the ERP connected to the selected legal entity."
+          erps.length
+            ? "RAMIS paths for each ERP on this organization. This map is read only."
+            : "RAMIS paths for the ERPs connected to this organization."
         }
       />
       {!entitySelected ? (
         <Typography color="text.secondary">Select one legal entity to see its field map.</Typography>
-      ) : connection === null ? (
-        <Typography color="text.secondary">Connect an ERP on the ERP tab before viewing its field map.</Typography>
+      ) : erps.length === 0 ? (
+        <Typography color="text.secondary">Add an integration on the ERP tab before viewing its field map.</Typography>
       ) : (
-        schedules.map((schedule) => {
-          const mapped = rows.filter((row) => row.schedule === schedule.code);
-          return (
-            <Card key={schedule.code} sx={{ mb: 2 }}>
-              <Typography sx={{ px: 2.5, pt: 2, fontWeight: 700 }}>{schedule.title}</Typography>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>ERP field</TableCell>
-                    <TableCell>RAMIS field</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {mapped.map((row) => (
-                    <TableRow key={row.ramisField}>
-                      <TableCell>{row.erpField}</TableCell>
-                      <TableCell>{row.ramisField}</TableCell>
+        erps.map((erp) => (
+          <Card key={erp.code} sx={{ mb: 2 }}>
+            <Typography sx={{ px: 2.5, pt: 2, fontWeight: 700 }}>{erp.name}</Typography>
+            {schedules.map((schedule) => {
+              const mapped = rows.filter((row) => row.erpCode === erp.code && row.schedule === schedule.code);
+              return (
+                <Table key={schedule.code}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>{schedule.title} ERP field</TableCell>
+                      <TableCell>RAMIS field</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          );
-        })
+                  </TableHead>
+                  <TableBody>
+                    {mapped.map((row) => (
+                      <TableRow key={`${erp.code}:${row.schedule}:${row.ramisField}`}>
+                        <TableCell>{row.erpField}</TableCell>
+                        <TableCell>{row.ramisField}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              );
+            })}
+          </Card>
+        ))
       )}
     </>
   );

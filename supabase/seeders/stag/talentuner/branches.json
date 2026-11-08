@@ -1,0 +1,22 @@
+{
+  "branches": [
+    {
+      "ref": "branch-cmb",
+      "legal_entity_id": "talentuner-entity",
+      "code": "CMB",
+      "name": "Colombo depot"
+    },
+    {
+      "ref": "branch-kdy",
+      "legal_entity_id": "talentuner-entity",
+      "code": "KDY",
+      "name": "Kandy depot"
+    },
+    {
+      "ref": "branch-ho",
+      "legal_entity_id": "talentuner-entity",
+      "code": "HO",
+      "name": "Head office"
+    }
+  ]
+}

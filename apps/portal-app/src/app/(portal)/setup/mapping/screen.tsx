@@ -9,7 +9,7 @@ export default function MappingPage() {
     <PageData load={fetchMapping}>
       {(portal) => (
         <MappingView
-          connection={portal.erpConnection}
+          connections={portal.erpConnections}
           rows={portal.scheduleMaps}
           entitySelected={portal.filters.entityId !== "all"}
         />

@@ -58,6 +58,7 @@ model Organization {
   name              String
   slug              String   @unique(map: "organizations_slug_uidx")
   monthly_allowance Int      @default(500)
+  polling_enabled   Boolean  @default(false)
   created_at        DateTime @default(now()) @db.Timestamptz(6)
 
   legalEntities       LegalEntity[]
@@ -68,8 +69,21 @@ model Organization {
   inboundAdjustments  InboundAdjustment[]
   invoiceUsage        InvoiceUsage[]
   auditLogs           AuditLog[]
+  erpConnections      ErpConnection[]
+  erpChangeRequests   ErpChangeRequest[]
+  sftpCredential      SftpCredential?
 
   @@map("organizations")
+}
+
+model SftpCredential {
+  organization_id BigInt   @id
+  password_hash   String
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@map("sftp_credentials")
 }
 
 model LegalEntity {
@@ -90,21 +104,53 @@ model LegalEntity {
   inboundInvoices     InboundInvoice[]
   inboundAdjustments  InboundAdjustment[]
   auditLogs           AuditLog[]
-  erpConnection       ErpConnection?
+  erpConnections      ErpConnection[]
 
   @@unique([organization_id, tin], map: "legal_entities_org_tin_uidx")
   @@map("legal_entities")
 }
 
 model ErpConnection {
-  legal_entity_id BigInt   @id
-  erp_code        String
-  status          String   @default("connected")
-  connected_at    DateTime @default(now()) @db.Timestamptz(6)
+  id                BigInt    @id @default(autoincrement())
+  organization_id   BigInt
+  legal_entity_id   BigInt?
+  erp_code          String
+  label             String?
+  status            String    @default("offline")
+  connected_at      DateTime  @default(now()) @db.Timestamptz(6)
+  ingestion_mode    String    @default("sftp")
+  endpoint_url      String?
+  api_username      String?
+  api_secret        String?
+  last_invoice_id   String?
+  last_polled_at    DateTime? @db.Timestamptz(6)
+  next_poll_at      DateTime? @db.Timestamptz(6)
+  last_error        String?
+  poll_locked_until DateTime? @db.Timestamptz(6)
 
-  legalEntity LegalEntity @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
+  organization   Organization       @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  legalEntity    LegalEntity?       @relation(fields: [legal_entity_id], references: [id], onDelete: SetNull)
+  changeRequests ErpChangeRequest[]
 
+  @@index([organization_id, ingestion_mode], map: "erp_connections_org_mode_idx")
   @@map("erp_connections")
+}
+
+model ErpChangeRequest {
+  id                BigInt    @id @default(autoincrement())
+  erp_connection_id BigInt
+  organization_id   BigInt
+  user_id           String    @db.Uuid
+  action            String
+  status            String    @default("pending")
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  decided_at        DateTime? @db.Timestamptz(6)
+
+  connection   ErpConnection @relation(fields: [erp_connection_id], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id, status], map: "erp_change_requests_org_idx")
+  @@map("erp_change_requests")
 }
 
 model ErpFieldMapping {

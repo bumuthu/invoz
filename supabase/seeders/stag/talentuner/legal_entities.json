@@ -1,0 +1,10 @@
+{
+  "legal_entities": [
+    {
+      "ref": "talentuner-entity",
+      "organization_id": "talentuner",
+      "name": "Talentuner Pvt Ltd",
+      "tin": "102345678"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "serial_counters": [
+    {
+      "branch_id": "branch-cmb",
+      "legal_entity_id": "talentuner-entity",
+      "period": "26OCT",
+      "last_value": 42
+    },
+    {
+      "branch_id": "branch-kdy",
+      "legal_entity_id": "talentuner-entity",
+      "period": "26OCT",
+      "last_value": 18
+    },
+    {
+      "branch_id": "branch-ho",
+      "legal_entity_id": "talentuner-entity",
+      "period": "26OCT",
+      "last_value": 6
+    }
+  ]
+}

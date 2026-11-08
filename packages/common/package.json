@@ -8,6 +8,7 @@
     "./queues": "./src/queues/index.ts",
     "./models": "./src/models/index.ts",
     "./utils": "./src/utils/index.ts",
+    "./secret": "./src/utils/secret.ts",
     "./ramis": "./src/ramis/index.ts"
   },
   "scripts": {

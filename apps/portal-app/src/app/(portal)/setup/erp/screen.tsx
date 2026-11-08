@@ -11,10 +11,10 @@ export default function ErpPage() {
         <ErpView
           catalog={portal.erpCatalog}
           connections={portal.erpConnections}
-          connection={portal.erpConnection}
+          entities={portal.entities}
           organizationId={portal.organization.id}
-          entityId={portal.filters.entityId === "all" ? null : portal.filters.entityId}
           canConnect={portal.canMap}
+          pollingEnabled={portal.pollingEnabled}
         />
       )}
     </PageData>

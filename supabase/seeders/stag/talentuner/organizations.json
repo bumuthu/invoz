@@ -1,0 +1,10 @@
+{
+  "organizations": [
+    {
+      "ref": "talentuner",
+      "name": "Talentuner Pvt Ltd",
+      "slug": "talentuner",
+      "monthly_allowance": 5000
+    }
+  ]
+}

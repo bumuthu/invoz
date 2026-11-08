@@ -31,6 +31,9 @@ LANDING_FUNCTION="$(aws_name landing-service)"
 LANDING_ROLE="${LANDING_FUNCTION}-role"
 LANDING_API_NAME="$LANDING_FUNCTION"
 TRANSFER_ROLE="$(aws_name transfer)"
+ERP_POLL_ROLE="$(aws_name erp-poll)-role"
+ERP_POLL_SAP_FUNCTION="$(aws_name erp-poll-s4hana)"
+ERP_POLL_SAP_RULE="$ERP_POLL_SAP_FUNCTION"
 
 # stag-ramis.api.invoz.lk and stag-landing.api.invoz.lk, or ramis / landing on prod.
 http_api_host() {

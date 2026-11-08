@@ -19,6 +19,8 @@ S3, SQS, the invoice-engine Lambda, EventBridge, and the two HTTP APIs come from
 | Landing hostname | `stag-landing.api.invoz.lk`, or `landing.api.invoz.lk` on prod |
 | Transfer Family role | `invoz-{env}-transfer` |
 | SFTP identity Lambda | `invoz-{env}-sftp-idp` |
+| SAP poll Lambda and role | `invoz-{env}-erp-poll-s4hana`, `invoz-{env}-erp-poll-role` |
+| SAP poll schedule | `invoz-{env}-erp-poll-s4hana` `rate(1 minute)` |
 
 `npm run provision` runs S3, SQS, Lambda, and EventBridge in one shot. Use the steps below when you want to create one resource at a time. EventBridge has no script of its own. The full `npm run provision` command is what attaches it, and that command is safe to repeat.
 
@@ -42,7 +44,6 @@ cp tools/deployment/env.example tools/deployment/.env
 | `AWS_REGION` | Every step | Defaults to `ap-south-1` when unset. |
 | `APP_ENV` | Every step | `stag` or `prod`. Prefixes every AWS name. |
 | `API_CERTIFICATE_ARN` | RAMIS and landing | ISSUED ACM certificate in `AWS_REGION`. `*.api.invoz.lk` covers both hostnames. |
-| `ORGANIZATION_ID` | SFTP, per organization | Organization id from `organizations.id`. Not stored in `.env`. The SFTP user is chrooted to `uploads/{organization id}/` in `invoz-{env}-invoices`. |
 
 Each Lambda takes its environment from the `.env` in its package. `tools/deployment/.env` is not copied onto a function.
 
@@ -51,6 +52,7 @@ Each Lambda takes its environment from the `.env` in its package. `tools/deploym
 | `packages/invoice-engine/.env` | `npm run provision:lambda` |
 | `tools/ramis-engine/.env` | `npm run provision:ramis` |
 | `packages/landing-service/.env` | `npm run provision:landing` |
+| `packages/erp-poll/.env` | `npm run provision:erp-poll-lambda -w @invoz/deployment` |
 
 The shell scripts do not read `.env` on their own. Load it into the shell:
 
@@ -96,16 +98,10 @@ Keys ending in `.csv.tmp` do not match the EventBridge rule. The rule matches th
 
 One public SFTP server per environment. One password per organization, chrooted to `uploads/{organization id}/` in the shared bucket. The server is billed for every hour it exists, plus the data uploaded. The first run creates the Transfer server, the identity-provider Lambda, and the IAM role. Later runs add another organization.
 
-`ORGANIZATION_ID` is `organizations.id` from `npm run onboard`. The username is that id. The password is printed once and, when you pass `--from`, stored in the onboarding result file. Secrets Manager keeps only a hash.
+The arguments are the environment and the organization slug. `npm run onboard -- <stag|prod> <slug>` must already have created that organization. The username is `organizations.id`. The password is printed once and written to `supabase/seeders/<env>/<slug>/sftp.json`. The database table `sftp_credentials` keeps a scrypt hash of that password. The identity-provider Lambda reads the hash when the customer signs in. The environment argument has to match `APP_ENV`.
 
 ```bash
-npm run onboard:sftp -- 101
-```
-
-Or point at the result file:
-
-```bash
-npm run onboard:sftp -- --from supabase/onboarding/acme.result.json
+npm run onboard:sftp -- stag talentuner
 ```
 
 Replace an existing password with `--rotate`. The script loads `tools/deployment/.env` when `APP_ENV` is not already set.
@@ -207,21 +203,50 @@ aws events list-targets-by-rule \
 
 The target ARN should be `invoz-${APP_ENV}-invoicing-pipeline.fifo`.
 
+## ERP polling
+
+SFTP stays the default. Polling runs only when `organizations.polling_enabled` is true and an organization `erp_connections` row has `ingestion_mode = 'poll'` and `status = 'live'`. `npm run provision` does not create this schedule.
+
+`packages/erp-poll/.env` must contain `DATABASE_URL` and `INVOICE_BUCKET` (`invoz-${APP_ENV}-invoices`). The Lambda script adds `APP_ENV` from the shell. Each polling row stores its billing document API and API key. The poller sends the key in the `APIKey` header. One organization has one SFTP integration and can have several polling configs for the same ERP. A legal entity on the row is optional. The portal form asks for the billing document API, the API key, the configuration name, an optional starting billing document, and an optional legal entity. It sends an enable or disable request and does not change `status` itself. Only SAP (`s4hana`, `sap_ecc`, `sap_b1`) and IFS can be requested for polling. Set the billing document API to the `API_BILLING_DOCUMENT_SRV` service root, and set the starting billing document before go-live if older documents must not be submitted.
+
+```bash
+npm run provision:erp-poll-lambda -w @invoz/deployment
+npm run provision:erp-poll-schedule -w @invoz/deployment
+```
+
+Check:
+
+```bash
+aws lambda get-function-configuration \
+  --function-name invoz-${APP_ENV}-erp-poll-s4hana \
+  --region "$AWS_REGION" \
+  --query '{State:State,Handler:Handler,Timeout:Timeout}'
+
+aws events describe-rule \
+  --name invoz-${APP_ENV}-erp-poll-s4hana \
+  --region "$AWS_REGION" \
+  --query '{State:State,Schedule:ScheduleExpression}'
+```
+
+The function reads billing documents `F2` and `FX` in ascending `BillingDocument` order, 100 per page and at most 5 pages per run. After each full page is written to `uploads/{organization_id}/{legal_entity_id}/{branch_id}/inbound/poll-{invoiceId}.csv`, it stores that page's last id. The existing S3 rule then clears the file.
+
 ## Upload invoices
 
 Inbound CSVs for each environment live in `tools/invoice-uploader`:
 
 ```text
-tools/invoice-uploader/invoices/{env}/{organization_id}/{legal_entity_id}/{branch_id}/inbound/{file}.csv
+tools/invoice-uploader/invoices/{env}/{organization_slug}/{legal_entity_id}/{branch_id}/inbound/{file}.csv
 ```
 
-`{env}` is `stag` or `prod`. The sync puts those files at the same keys an SFTP upload uses. A file is sent when the key is missing, or the local copy is newer or a different size. `.csv.tmp` files and any file outside `inbound/` are skipped.
+`{env}` is `stag` or `prod`. `npm run sync:invoices -- stag <slug>` signs in with `tools/invoice-uploader/sftp/<slug>.env` and writes `/{legal_entity_id}/{branch_id}/inbound/{file}.csv`. The user is chrooted at `uploads/{organization_id}/`, so the object lands on the same key as a customer upload. A file is sent when the remote file is missing or a different size. `.csv.tmp` files and any file outside `inbound/` are skipped.
+
+`npm run onboard:sftp -- <stag|prod> <slug>` writes that env file. It contains `SFTP_HOST`, `SFTP_USERNAME` (the organization id), and `SFTP_PASSWORD`. Copy `tools/invoice-uploader/sftp/env.example` when you need to fill it in by hand.
 
 ```bash
-npm run sync:invoices -- stag
+npm run sync:invoices -- stag tesla
 ```
 
-With no argument, the script uses `APP_ENV`. `AWS_REGION` defaults to `ap-south-1`.
+Without the slug, the command uploads every organization folder under `invoices/stag` that has a matching env file.
 
 ## Smoke test
 

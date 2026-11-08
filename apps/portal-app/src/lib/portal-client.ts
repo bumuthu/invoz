@@ -143,8 +143,25 @@ export function approveInbound(organizationId: string, ids: string[]) {
   return postJson<ActionResult>("purchases/approve", { organizationId, ids });
 }
 
-export function connectErp(organizationId: string, entityId: string, erpCode: string) {
-  return postJson<ActionResult>("erp", { organizationId, entityId, erpCode });
+export function requestSftp(organizationId: string, erpCode: string, legalEntityId: string | null) {
+  return postJson<ActionResult>("erp", { organizationId, action: "sftp", erpCode, legalEntityId });
+}
+
+export function requestPoll(input: {
+  organizationId: string;
+  erpCode: string;
+  label: string;
+  endpointUrl: string;
+  apiKey: string;
+  lastInvoiceId: string | null;
+  legalEntityId: string | null;
+  connectionId: string | null;
+}) {
+  return postJson<ActionResult>("erp", { ...input, action: "poll" });
+}
+
+export function requestErpChange(organizationId: string, connectionId: string, action: "enable" | "disable") {
+  return postJson<ActionResult>("erp", { organizationId, connectionId, action });
 }
 
 export function inviteMember(organizationId: string, email: string, role: PortalRole) {

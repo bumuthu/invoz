@@ -1,0 +1,8 @@
+{
+  "auth_users": [
+    { "ref": "bumuthu", "email": "bumuthu@talentuner.lk", "name": "Bumuthu Dilshan", "password": "password" }
+  ],
+  "memberships": [
+    { "user_id": "bumuthu", "organization_id": "talentuner", "role": "owner" }
+  ]
+}

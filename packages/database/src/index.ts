@@ -2,6 +2,7 @@ export { prisma } from "./client";
 export {
   auditLogRow,
   branchRow,
+  erpChangeRequestRow,
   erpConnectionRow,
   erpFieldMappingRow,
   fieldMappingRow,

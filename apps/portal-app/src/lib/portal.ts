@@ -566,16 +566,57 @@ async function loadAuditEvents(scope: Scope, take: number): Promise<AuditEvent[]
   }));
 }
 
+const connectionSelect = {
+  id: true,
+  legal_entity_id: true,
+  erp_code: true,
+  label: true,
+  connected_at: true,
+  ingestion_mode: true,
+  status: true,
+  endpoint_url: true,
+  last_invoice_id: true,
+  last_error: true,
+} satisfies Prisma.ErpConnectionSelect;
+
+function maskApiKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const tail = value.length >= 8 ? value.slice(-4) : "";
+  return `••••••••${tail}`;
+}
+
 function connectionView(
-  row: { erp_code: string; legal_entity_id: bigint; connected_at: Date },
+  row: {
+    id: bigint;
+    erp_code: string;
+    label: string | null;
+    legal_entity_id: bigint | null;
+    endpoint_url: string | null;
+    api_secret?: string | null;
+    connected_at: Date;
+    ingestion_mode: string;
+    status: string;
+    last_invoice_id: string | null;
+    last_error: string | null;
+  },
   entityName: Map<number, string>,
+  pendingRequest: "enable" | "disable" | null,
 ): ErpConnectionView {
   return {
+    id: String(row.id),
     code: row.erp_code,
     name: erpName(row.erp_code),
-    entityId: String(row.legal_entity_id),
-    entityName: entityName.get(Number(row.legal_entity_id)) ?? String(row.legal_entity_id),
+    label: row.label,
+    entityId: row.legal_entity_id === null ? null : String(row.legal_entity_id),
+    entityName: row.legal_entity_id === null ? null : (entityName.get(Number(row.legal_entity_id)) ?? null),
+    endpointUrl: row.endpoint_url,
+    maskedApiKey: maskApiKey(row.api_secret),
     connectedAt: row.connected_at.toISOString(),
+    ingestionMode: row.ingestion_mode,
+    status: row.status,
+    lastInvoiceId: row.last_invoice_id,
+    lastError: row.last_error,
+    pendingRequest,
   };
 }
 
@@ -636,17 +677,37 @@ export const loadUsers = cache(async () => {
 
 export const loadErp = cache(async () => {
   const scope = await loadScope();
-  const records = await prisma.erpConnection.findMany({
-    where: { legal_entity_id: { in: scope.entityIds } },
-  });
+  const entityFilter =
+    scope.appliedFilters.entityId === "all"
+      ? {}
+      : { OR: [{ legal_entity_id: null }, { legal_entity_id: { in: scope.entityIds } }] };
+  const [records, requests] = await Promise.all([
+    prisma.erpConnection.findMany({
+      where: { organization_id: scope.organizationId, ...entityFilter },
+      orderBy: [{ connected_at: "asc" }],
+      select: { ...connectionSelect, api_secret: true },
+    }),
+    prisma.erpChangeRequest.findMany({
+      where: { organization_id: scope.organizationId, status: "pending" },
+      select: { erp_connection_id: true, action: true },
+    }),
+  ]);
+  const pending = new Map(
+    requests.flatMap((row) =>
+      row.action === "enable" || row.action === "disable" ? [[String(row.erp_connection_id), row.action] as const] : [],
+    ),
+  );
   const entityName = new Map(scope.entities.map((entity) => [entity.id, entity.name]));
-  const selectedId = scope.appliedFilters.entityId === "all" ? null : scope.entityIds[0];
-  const selected = selectedId ? (records.find((row) => row.legal_entity_id === selectedId) ?? null) : null;
   return {
     erpCatalog: erpCatalog.map((erp) => ({ code: erp.code, name: erp.name })),
-    erpConnections: records.map((row) => connectionView(row, entityName)),
-    erpConnection: selected ? connectionView(selected, entityName) : null,
+    erpConnections: records.map((row) => connectionView(row, entityName, pending.get(String(row.id)) ?? null)),
+    entities: scope.entities.map((entity) => ({
+      id: String(entity.id),
+      name: entity.name,
+      tin: entity.tin,
+    })),
     organization: organizationOf(scope),
+    pollingEnabled: scope.access.organization.polling_enabled,
     filters: scope.appliedFilters,
     canMap: scope.flags.canMap,
   };
@@ -655,24 +716,32 @@ export const loadErp = cache(async () => {
 export const loadMapping = cache(async () => {
   const scope = await loadScope();
   const selectedId = scope.appliedFilters.entityId === "all" ? null : scope.entityIds[0];
-  const connection = selectedId
-    ? await prisma.erpConnection.findUnique({ where: { legal_entity_id: selectedId } })
-    : null;
+  const connections = selectedId
+    ? await prisma.erpConnection.findMany({
+        where: {
+          organization_id: scope.organizationId,
+          OR: [{ legal_entity_id: null }, { legal_entity_id: selectedId }],
+        },
+        orderBy: { connected_at: "asc" },
+        select: connectionSelect,
+      })
+    : [];
   const entityName = new Map(scope.entities.map((entity) => [entity.id, entity.name]));
-  const mapRecords = connection
+  const codes = [...new Set(connections.map((row) => row.erp_code))];
+  const mapRecords = codes.length
     ? await prisma.erpFieldMapping.findMany({
-        where: { erp_code: connection.erp_code, schedule: { in: ["01", "04", "07"] } },
-        orderBy: [{ schedule: "asc" }, { ramis_field: "asc" }],
-        select: { schedule: true, erp_field: true, ramis_field: true },
+        where: { erp_code: { in: codes }, schedule: { in: ["01", "04", "07"] } },
+        orderBy: [{ erp_code: "asc" }, { schedule: "asc" }, { ramis_field: "asc" }],
+        select: { erp_code: true, schedule: true, erp_field: true, ramis_field: true },
       })
     : [];
   const scheduleMaps = mapRecords.flatMap((row): ScheduleMapRow[] =>
     row.schedule === "01" || row.schedule === "04" || row.schedule === "07"
-      ? [{ schedule: row.schedule, erpField: row.erp_field, ramisField: row.ramis_field }]
+      ? [{ erpCode: row.erp_code, schedule: row.schedule, erpField: row.erp_field, ramisField: row.ramis_field }]
       : [],
   );
   return {
-    erpConnection: connection ? connectionView(connection, entityName) : null,
+    erpConnections: connections.map((row) => connectionView(row, entityName, null)),
     scheduleMaps,
     filters: scope.appliedFilters,
   };

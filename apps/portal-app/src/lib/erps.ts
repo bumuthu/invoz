@@ -13,8 +13,14 @@ export const erpCatalog = [
 
 export type ErpCode = (typeof erpCatalog)[number]["code"];
 
+export const pollErpCodes = ["s4hana", "sap_ecc", "sap_b1", "ifs"] as const;
+
 export function isErpCode(value: string): value is ErpCode {
   return erpCatalog.some((erp) => erp.code === value);
+}
+
+export function canPollErp(code: string): boolean {
+  return (pollErpCodes as readonly string[]).includes(code);
 }
 
 export function erpName(code: string): string {

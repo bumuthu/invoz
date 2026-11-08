@@ -1,0 +1,8 @@
+{
+  "auth_users": [
+    { "ref": "tesla-owner", "email": "owner@tesla.lk", "name": "Tesla Owner", "password": "password" }
+  ],
+  "memberships": [
+    { "user_id": "tesla-owner", "organization_id": "tesla", "role": "owner" }
+  ]
+}

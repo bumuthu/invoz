@@ -32,6 +32,7 @@ export type Organization = {
   name: string;
   slug: string;
   monthlyAllowance: number;
+  pollingEnabled: boolean;
   createdAt: string;
 };
 
@@ -68,10 +69,32 @@ export type FieldMapping = {
 };
 
 export type ErpConnection = {
-  legalEntityId: RowId;
+  id: RowId;
+  organizationId: RowId;
+  legalEntityId: RowId | null;
   erpCode: string;
+  label: string | null;
   status: string;
   connectedAt: string;
+  ingestionMode: string;
+  endpointUrl: string | null;
+  apiUsername: string | null;
+  lastInvoiceId: string | null;
+  lastPolledAt: string | null;
+  nextPollAt: string | null;
+  lastError: string | null;
+  pollLockedUntil: string | null;
+};
+
+export type ErpChangeRequest = {
+  id: RowId;
+  erpConnectionId: RowId;
+  organizationId: RowId;
+  userId: string;
+  action: string;
+  status: string;
+  createdAt: string;
+  decidedAt: string | null;
 };
 
 export type ErpFieldMapping = {

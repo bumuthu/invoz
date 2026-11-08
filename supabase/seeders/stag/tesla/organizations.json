@@ -1,0 +1,10 @@
+{
+  "organizations": [
+    {
+      "ref": "tesla",
+      "name": "Tesla Pvt Ltd",
+      "slug": "tesla",
+      "monthly_allowance": 5000
+    }
+  ]
+}

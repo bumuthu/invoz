@@ -1,6 +1,7 @@
 import type {
   AuditLog,
   Branch,
+  ErpChangeRequest,
   ErpConnection,
   ErpFieldMapping,
   FieldMapping,
@@ -18,6 +19,7 @@ import type {
 import type {
   AuditLogRow,
   BranchRow,
+  ErpChangeRequestRow,
   ErpConnectionRow,
   ErpFieldMappingRow,
   FieldMappingRow,
@@ -39,6 +41,7 @@ export function toOrganization(row: OrganizationRow): Organization {
     name: row.name,
     slug: row.slug,
     monthlyAllowance: row.monthly_allowance,
+    pollingEnabled: row.polling_enabled,
     createdAt: row.created_at,
   };
 }
@@ -85,10 +88,34 @@ export function toFieldMapping(row: FieldMappingRow): FieldMapping {
 
 export function toErpConnection(row: ErpConnectionRow): ErpConnection {
   return {
+    id: row.id,
+    organizationId: row.organization_id,
     legalEntityId: row.legal_entity_id,
     erpCode: row.erp_code,
+    label: row.label,
     status: row.status,
     connectedAt: row.connected_at,
+    ingestionMode: row.ingestion_mode,
+    endpointUrl: row.endpoint_url,
+    apiUsername: row.api_username,
+    lastInvoiceId: row.last_invoice_id,
+    lastPolledAt: row.last_polled_at,
+    nextPollAt: row.next_poll_at,
+    lastError: row.last_error,
+    pollLockedUntil: row.poll_locked_until,
+  };
+}
+
+export function toErpChangeRequest(row: ErpChangeRequestRow): ErpChangeRequest {
+  return {
+    id: row.id,
+    erpConnectionId: row.erp_connection_id,
+    organizationId: row.organization_id,
+    userId: row.user_id,
+    action: row.action,
+    status: row.status,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
   };
 }
 

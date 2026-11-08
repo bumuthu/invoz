@@ -12,6 +12,7 @@ export type OrganizationRow = {
   name: string;
   slug: string;
   monthly_allowance: number;
+  polling_enabled: boolean;
   created_at: string;
 };
 
@@ -48,10 +49,33 @@ export type FieldMappingRow = {
 };
 
 export type ErpConnectionRow = {
-  legal_entity_id: RowId;
+  id: RowId;
+  organization_id: RowId;
+  legal_entity_id: RowId | null;
   erp_code: string;
+  label: string | null;
   status: string;
   connected_at: string;
+  ingestion_mode: string;
+  endpoint_url: string | null;
+  api_username: string | null;
+  api_secret: string | null;
+  last_invoice_id: string | null;
+  last_polled_at: string | null;
+  next_poll_at: string | null;
+  last_error: string | null;
+  poll_locked_until: string | null;
+};
+
+export type ErpChangeRequestRow = {
+  id: RowId;
+  erp_connection_id: RowId;
+  organization_id: RowId;
+  user_id: string;
+  action: string;
+  status: string;
+  created_at: string;
+  decided_at: string | null;
 };
 
 export type ErpFieldMappingRow = {
@@ -193,6 +217,7 @@ export type Tables = {
   memberships: MembershipRow;
   field_mappings: FieldMappingRow;
   erp_connections: ErpConnectionRow;
+  erp_change_requests: ErpChangeRequestRow;
   erp_field_mappings: ErpFieldMappingRow;
   ramis_credentials: RamisCredentialRow;
   serial_counters: SerialCounterRow;
@@ -207,12 +232,39 @@ export type Tables = {
 export type TableName = keyof Tables;
 
 export const tableColumns = {
-  organizations: ["id", "name", "slug", "monthly_allowance", "created_at"],
+  organizations: ["id", "name", "slug", "monthly_allowance", "polling_enabled", "created_at"],
   legal_entities: ["id", "organization_id", "name", "tin", "vat_number", "created_at"],
   branches: ["id", "legal_entity_id", "code", "name", "created_at"],
   memberships: ["id", "user_id", "organization_id", "role", "created_at"],
   field_mappings: ["id", "legal_entity_id", "source_column", "target_field"],
-  erp_connections: ["legal_entity_id", "erp_code", "status", "connected_at"],
+  erp_connections: [
+    "id",
+    "organization_id",
+    "legal_entity_id",
+    "erp_code",
+    "label",
+    "status",
+    "connected_at",
+    "ingestion_mode",
+    "endpoint_url",
+    "api_username",
+    "api_secret",
+    "last_invoice_id",
+    "last_polled_at",
+    "next_poll_at",
+    "last_error",
+    "poll_locked_until",
+  ],
+  erp_change_requests: [
+    "id",
+    "erp_connection_id",
+    "organization_id",
+    "user_id",
+    "action",
+    "status",
+    "created_at",
+    "decided_at",
+  ],
   erp_field_mappings: ["id", "erp_code", "schedule", "ramis_field", "erp_field"],
   ramis_credentials: ["legal_entity_id", "certificate_secret_arn", "updated_at"],
   serial_counters: ["branch_id", "legal_entity_id", "period", "last_value"],

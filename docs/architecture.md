@@ -52,6 +52,7 @@ flowchart LR
 | Certificates | AWS Secrets Manager | RAMIS client certificate and private key, encrypted with KMS. `ramis_credentials.certificate_secret_arn` stores the ARN. |
 | Failures | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline-dlq.fifo` | Messages that still fail after 3 receives. Unparseable files and permanent 4xx outcomes are recorded as rejected before that. |
 | Operations | CloudWatch and SNS | Queue depth, Lambda duration, and DLQ alarms. |
+| ERP polling | EventBridge schedule and Lambda `invoz-{env}-erp-poll-s4hana` | Runs every minute. Integrations belong to the organization. SFTP is one per organization. Polling can have several API configs for the same ERP. The poller takes rows with `status = 'live'`, `ingestion_mode = 'poll'`, and the organization flag on. Each page is written as `poll-{erp_code}-{invoiceId}.csv`. |
 
 A legal entity keeps its own serial lane per branch. The FIFO group is `{legalEntityId}:{branchCode}`, not the organization id. Two subsidiaries in one organization must not share a sequence.
 
@@ -125,11 +126,10 @@ Supabase holds operational state and serves the apps. It does not receive ERP fi
 | Path | What it does |
 | --- | --- |
 | `migrations/0001_initial.sql` | Organizations, legal entities, branches, memberships, invoices, adjustments, serials, credentials, usage, audit log, and Row-Level Security. |
-| `seeders/` | JSON seed objects exported from `seeders/index.ts`. |
+| `seeders/<env>/<slug>/` | One folder per organization, under `stag` or `prod`. `owner.json` holds the owner account, password, and membership. The other JSON files hold the organization config. |
 | `scripts/migrate.ts` | Applies `migrations` and records each file in `schema_migrations`. |
-| `scripts/seed.ts` | Inserts every seed object through Prisma, using `tableColumns` from `@invoz/common`. Auth users are still created with the Supabase Auth admin API. |
-| `scripts/write-onboarding.ts` | Writes one organization JSON file under `onboarding/`. |
-| `scripts/onboard.ts` | Creates that organization, its legal entities, branches, and owner account. |
+| `scripts/seed.ts` | Inserts every seeder folder for one environment through Prisma, using `tableColumns` from `@invoz/common`. Auth users are still created with the Supabase Auth admin API. |
+| `scripts/onboard.ts` | Creates one organization from `seeders/<env>/<slug>/`. |
 | `er-diagram.md` | Entity diagram for the migration. |
 
 The Lambda handler is `handler` in `@invoz/invoice-engine`. There is no Supabase Edge Function and no database queue.
@@ -167,7 +167,7 @@ Tables:
 
 Sign out is in the sidebar. It clears the session and returns to `/auth/login`.
 
-The browser key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, or `NEXT_PUBLIC_SUPABASE_ANON_KEY` when that name is set. `SUPABASE_SERVICE_ROLE_KEY` stays server-only. Seed passwords live in `supabase/seeders/passwords.json` and are applied by `npm run seed`; the portal does not read that file.
+The browser key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, or `NEXT_PUBLIC_SUPABASE_ANON_KEY` when that name is set. `SUPABASE_SERVICE_ROLE_KEY` stays server-only. The owner password lives on the auth user in `supabase/seeders/<env>/<slug>/owner.json` and is applied by `npm run seed -- <env>` and `npm run onboard -- <env> <slug>`. The portal does not read that file. Invoice usage is not seeded, so it starts at 0.
 
 ## Workspace
 
@@ -205,22 +205,14 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 
 ## Onboarding
 
-A new organization starts as a JSON file. The apply script creates the database rows and the owner account. The owner then invites everyone else from Users. SFTP is a separate step and uses the organization id from the result file.
+A new organization is a folder, `supabase/seeders/<env>/<slug>/`. `<env>` is `stag` or `prod`. `owner.json` holds the owner account, password, and membership. The other JSON files hold the organization, legal entities, branches, field mappings, and serial counters. `npm run onboard -- <env> <slug>` creates those rows and the owner account. The owner then invites everyone else from Users. SFTP is a separate step and uses the same environment and slug. The numeric organization id comes from the database.
 
 ```bash
-npm run onboard:json -- \
-  --name "Acme (Pvt) Ltd" \
-  --slug acme \
-  --owner-name "Ayesha Fernando" \
-  --owner-email owner@acme.lk \
-  --tin 102345678 \
-  --branch "HO|Head office"
-
-npm run onboard -- supabase/onboarding/acme.json
-npm run onboard:sftp -- --from supabase/onboarding/acme.result.json
+npm run onboard -- stag talentuner
+npm run onboard:sftp -- stag talentuner
 ```
 
-`npm run onboard` prints the owner password once and writes `acme.result.json`. That file is gitignored. Run the same onboard file again to add a legal entity or branch that was missing. It does not replace an existing owner password. `npm run onboard:sftp -- --rotate` replaces the SFTP password.
+Run the same environment and slug again to add a row that was missing. It does not replace an existing owner password. `npm run onboard:sftp` writes `supabase/seeders/<env>/<slug>/sftp.json`, which is gitignored. `npm run onboard:sftp -- stag talentuner --rotate` replaces the SFTP password.
 
 ## Commands
 
@@ -232,13 +224,15 @@ npm run onboard:sftp -- --from supabase/onboarding/acme.result.json
 | `npm run typecheck` | Every workspace package |
 | `npm run migrate` | `supabase/scripts/migrate.ts` |
 | `npm run migrate:ramis` | `tools/ramis-engine/scripts/migrate.ts` |
-| `npm run seed` | `supabase/scripts/seed.ts` |
-| `npm run onboard:json` | Writes `supabase/onboarding/<slug>.json` |
-| `npm run onboard` | Creates the organization and owner from that file |
-| `npm run onboard:sftp` | SFTP password for `uploads/{organization_id}/` |
+| `npm run seed -- <stag\|prod>` | `supabase/scripts/seed.ts` for that environment |
+| `npm run onboard -- <stag\|prod> <slug>` | Creates one organization from `supabase/seeders/<env>/<slug>/` |
+| `npm run onboard:sftp -- <stag\|prod> <slug>` | SFTP password for that slug. The hash is stored in `sftp_credentials`. The password is stored in `seeders/<env>/<slug>/sftp.json` and `tools/invoice-uploader/sftp/<slug>.env` |
+| `npm run sync:invoices -- stag <slug>` | Uploads `tools/invoice-uploader/invoices/stag/<slug>/` with that env file |
 | `npm run dev:ramis` | RAMIS engine on port 8090 |
 | `npm run test:ramis` | RAMIS engine tests |
 | `npm run provision` | `tools/deployment/provision.sh` |
 | `npm run provision:ramis` | `tools/deployment/ramis-engine.sh` |
+| `npm run provision:erp-poll-lambda -w @invoz/deployment` | Publishes `invoz-{env}-erp-poll-s4hana` |
+| `npm run provision:erp-poll-schedule -w @invoz/deployment` | EventBridge `rate(1 minute)` for that function |
 
-`npm run migrate` and `npm run seed` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `PORTAL_REQUIRE_ORG_HOST`). The portal root is `app.invoz.lk` in production and `app-stag.invoz.lk` on staging, in `apps/portal-app/src/lib/host.ts`. `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. The RAMIS and landing publishes also read `API_CERTIFICATE_ARN` from that file. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, and `packages/landing-service/.env`.
+`npm run migrate` and `npm run seed -- <stag|prod>` read `supabase/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`). `npm run migrate:ramis` reads `tools/ramis-engine/.env` (`RAMIS_DATABASE_URL`). The portal reads `apps/portal-app/.env` (`NEXT_PUBLIC_SUPABASE_URL`, the publishable key, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `PORTAL_REQUIRE_ORG_HOST`). The portal root is `app.invoz.lk` in production and `app-stag.invoz.lk` on staging, in `apps/portal-app/src/lib/host.ts`. `packages/landing-service/.env` needs `DATABASE_URL` for demo requests. `npm run provision` reads `APP_ENV` (`stag` or `prod`) and `AWS_REGION` from `tools/deployment/.env`. The RAMIS and landing publishes also read `API_CERTIFICATE_ARN` from that file. AWS names are `invoz-{APP_ENV}-{resource}`. The shared bucket is `invoz-{APP_ENV}-invoices`. Each Lambda publish reads only that function's package `.env` and writes those variables onto the function: `packages/invoice-engine/.env`, `tools/ramis-engine/.env`, `packages/landing-service/.env`, and `packages/erp-poll/.env`.

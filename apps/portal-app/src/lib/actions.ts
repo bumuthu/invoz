@@ -3,7 +3,7 @@ import { portalRoles, type PortalRole } from "@invoz/common";
 import { prisma } from "@invoz/database";
 import { enqueueResubmit } from "@/lib/queue";
 import { permissions, resolveAccess } from "@/lib/access";
-import { isErpCode } from "@/lib/erps";
+import { canPollErp, isErpCode } from "@/lib/erps";
 import { hostnameFrom, isLocalHost, organizationOrigin } from "@/lib/host";
 import { supabase } from "@/lib/supabase";
 
@@ -70,34 +70,263 @@ export async function approveInbound(organizationId: string, ids: string[]): Pro
   return { ok: true, message: `Approved ${rows.length} purchase${rows.length === 1 ? "" : "s"}.` };
 }
 
-export async function connectErp(organizationId: string, entityId: string, erpCode: string): Promise<ActionResult> {
-  if (!/^\d+$/.test(entityId)) return { ok: false, error: "Legal entity not found." };
+export async function requestSftp(
+  organizationId: string,
+  erpCode: string,
+  legalEntityId: string | null,
+): Promise<ActionResult> {
   if (!isErpCode(erpCode)) return { ok: false, error: "That ERP is not supported." };
+  const entityId = optionalEntity(legalEntityId);
+  if (entityId === "invalid") return { ok: false, error: "Legal entity not found." };
   const { access, error } = await authorize(organizationId);
   if (!access) return { ok: false, error };
   if (!permissions(access.role).canMap) {
-    return { ok: false, error: "Your role cannot connect an ERP." };
+    return { ok: false, error: "Your role cannot change an integration." };
   }
 
-  const entity = await prisma.legalEntity.findFirst({
-    where: { id: BigInt(entityId), organization_id: BigInt(organizationId) },
+  const organization = BigInt(organizationId);
+  if (!(await entityInOrganization(organization, entityId))) {
+    return { ok: false, error: "Legal entity not found." };
+  }
+  const existing = await prisma.erpConnection.findFirst({
+    where: { organization_id: organization, ingestion_mode: "sftp" },
+    select: { id: true },
   });
-  if (!entity) return { ok: false, error: "Legal entity not found." };
+  if (existing) return { ok: false, error: "This organization already has an SFTP integration." };
 
-  await prisma.erpConnection.upsert({
-    where: { legal_entity_id: entity.id },
-    create: { legal_entity_id: entity.id, erp_code: erpCode, status: "connected" },
-    update: { erp_code: erpCode, status: "connected", connected_at: new Date() },
+  try {
+    await prisma.$transaction(async (tx) => {
+      const connection = await tx.erpConnection.create({
+        data: {
+          organization_id: organization,
+          legal_entity_id: entityId,
+          erp_code: erpCode,
+          ingestion_mode: "sftp",
+          status: "offline",
+        },
+      });
+      await tx.erpChangeRequest.create({
+        data: {
+          erp_connection_id: connection.id,
+          organization_id: organization,
+          user_id: access.userId,
+          action: "enable",
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organization_id: organization,
+          legal_entity_id: entityId,
+          event: "erp.change_requested",
+          detail: { action: "enable", ingestionMode: "sftp", erp: erpCode },
+        },
+      });
+    });
+  } catch (caught) {
+    if (isUniqueViolation(caught)) {
+      return { ok: false, error: "This organization already has an SFTP integration." };
+    }
+    throw caught;
+  }
+  return { ok: true, message: "SFTP request sent. It stays offline until it is approved." };
+}
+
+export async function requestPoll(input: {
+  organizationId: string;
+  erpCode: string;
+  label: string;
+  endpointUrl: string;
+  apiKey: string;
+  lastInvoiceId: string | null;
+  legalEntityId: string | null;
+  connectionId: string | null;
+}): Promise<ActionResult> {
+  if (!canPollErp(input.erpCode)) return { ok: false, error: "Polling is available for SAP and IFS." };
+  const entityId = optionalEntity(input.legalEntityId);
+  if (entityId === "invalid") return { ok: false, error: "Legal entity not found." };
+  const label = input.label.trim();
+  if (!label || label.length > 80) return { ok: false, error: "Enter a name for this API configuration." };
+  const endpoint = endpointUrl(input.endpointUrl);
+  if (!endpoint) return { ok: false, error: "Enter the billing document API." };
+  const apiKey = input.apiKey.trim();
+  if (!apiKey || apiKey.length > 500) return { ok: false, error: "Enter the API key." };
+  const lastInvoiceId = optionalInvoiceId(input.lastInvoiceId);
+  if (lastInvoiceId === "invalid") return { ok: false, error: "Enter the last billing document to skip." };
+  const { access, error } = await authorize(input.organizationId);
+  if (!access) return { ok: false, error };
+  if (!permissions(access.role).canMap) {
+    return { ok: false, error: "Your role cannot change an integration." };
+  }
+
+  const organization = BigInt(input.organizationId);
+  if (!(await entityInOrganization(organization, entityId))) {
+    return { ok: false, error: "Legal entity not found." };
+  }
+
+  const details = {
+    legal_entity_id: entityId,
+    label,
+    endpoint_url: endpoint,
+    api_username: null,
+    api_secret: apiKey,
+    last_invoice_id: lastInvoiceId,
+  };
+  if (input.connectionId !== null) {
+    if (!/^\d+$/.test(input.connectionId)) return { ok: false, error: "Integration not found." };
+    const connection = await prisma.erpConnection.findFirst({
+      where: {
+        id: BigInt(input.connectionId),
+        organization_id: organization,
+        erp_code: input.erpCode,
+        ingestion_mode: "poll",
+      },
+    });
+    if (!connection) return { ok: false, error: "Integration not found." };
+    if (connection.status === "live") return { ok: false, error: "This integration is already live." };
+    const pending = await prisma.erpChangeRequest.findFirst({
+      where: { erp_connection_id: connection.id, status: "pending" },
+      select: { id: true },
+    });
+    if (pending) return { ok: false, error: "A request is already waiting for this integration." };
+    await prisma.$transaction([
+      prisma.erpConnection.update({ where: { id: connection.id }, data: details }),
+      prisma.erpChangeRequest.create({
+        data: {
+          erp_connection_id: connection.id,
+          organization_id: organization,
+          user_id: access.userId,
+          action: "enable",
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          organization_id: organization,
+          legal_entity_id: entityId,
+          event: "erp.change_requested",
+          detail: { action: "enable", ingestionMode: "poll", erp: input.erpCode, label },
+        },
+      }),
+    ]);
+    return { ok: true, message: "Polling request sent. It stays offline until it is approved." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const connection = await tx.erpConnection.create({
+      data: {
+        organization_id: organization,
+        erp_code: input.erpCode,
+        ingestion_mode: "poll",
+        status: "offline",
+        ...details,
+      },
+    });
+    await tx.erpChangeRequest.create({
+      data: {
+        erp_connection_id: connection.id,
+        organization_id: organization,
+        user_id: access.userId,
+        action: "enable",
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        organization_id: organization,
+        legal_entity_id: entityId,
+        event: "erp.change_requested",
+        detail: { action: "enable", ingestionMode: "poll", erp: input.erpCode, label },
+      },
+    });
   });
-  await prisma.auditLog.create({
-    data: {
-      organization_id: entity.organization_id,
-      legal_entity_id: entity.id,
-      event: "erp.connected",
-      detail: { erp: erpCode },
-    },
+  return { ok: true, message: "Polling request sent. It stays offline until it is approved." };
+}
+
+export async function requestErpChange(
+  organizationId: string,
+  connectionId: string,
+  action: "enable" | "disable",
+): Promise<ActionResult> {
+  if (!/^\d+$/.test(connectionId)) return { ok: false, error: "Integration not found." };
+  const { access, error } = await authorize(organizationId);
+  if (!access) return { ok: false, error };
+  if (!permissions(access.role).canMap) {
+    return { ok: false, error: "Your role cannot change an integration." };
+  }
+
+  const connection = await prisma.erpConnection.findFirst({
+    where: { id: BigInt(connectionId), organization_id: BigInt(organizationId) },
   });
-  return { ok: true, message: "ERP connected for this legal entity." };
+  if (!connection) return { ok: false, error: "Integration not found." };
+  if (action === "enable" && connection.status === "live") {
+    return { ok: false, error: "This integration is already live." };
+  }
+  if (action === "disable" && connection.status === "offline") {
+    return { ok: false, error: "This integration is already offline." };
+  }
+  const pending = await prisma.erpChangeRequest.findFirst({
+    where: { erp_connection_id: connection.id, status: "pending" },
+    select: { id: true },
+  });
+  if (pending) return { ok: false, error: "A request is already waiting for this integration." };
+
+  await prisma.$transaction([
+    prisma.erpChangeRequest.create({
+      data: {
+        erp_connection_id: connection.id,
+        organization_id: connection.organization_id,
+        user_id: access.userId,
+        action,
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        organization_id: connection.organization_id,
+        legal_entity_id: connection.legal_entity_id,
+        event: "erp.change_requested",
+        detail: { action, ingestionMode: connection.ingestion_mode, erp: connection.erp_code },
+      },
+    }),
+  ]);
+  return {
+    ok: true,
+    message: action === "enable" ? "Enable request sent." : "Disable request sent.",
+  };
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
+function optionalInvoiceId(value: string | null): string | null | "invalid" {
+  if (value === null || value.trim() === "") return null;
+  const invoiceId = value.trim();
+  if (invoiceId.length > 40 || /[\s'"]/.test(invoiceId)) return "invalid";
+  return invoiceId;
+}
+
+function optionalEntity(value: string | null): bigint | null | "invalid" {
+  if (value === null || value === "") return null;
+  if (!/^\d+$/.test(value)) return "invalid";
+  return BigInt(value);
+}
+
+async function entityInOrganization(organizationId: bigint, entityId: bigint | null): Promise<boolean> {
+  if (!entityId) return true;
+  const entity = await prisma.legalEntity.findFirst({
+    where: { id: entityId, organization_id: organizationId },
+    select: { id: true },
+  });
+  return entity !== null;
+}
+
+function endpointUrl(value: string): string | null {
+  const trimmed = value.trim();
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
 }
 
 export async function inviteMember(organizationId: string, emailInput: string, role: PortalRole): Promise<InviteResult> {

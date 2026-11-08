@@ -1,6 +1,7 @@
 import type {
   AuditLog,
   Branch,
+  ErpChangeRequest,
   ErpConnection,
   ErpFieldMapping,
   FieldMapping,
@@ -19,6 +20,7 @@ import type {
 import type {
   AuditLogRow,
   BranchRow,
+  ErpChangeRequestRow,
   ErpConnectionRow,
   ErpFieldMappingRow,
   FieldMappingRow,
@@ -38,12 +40,20 @@ function id(value: bigint): number {
   return Number(value);
 }
 
+function idOrNull(value: bigint | null): number | null {
+  return value === null ? null : Number(value);
+}
+
 function day(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
 function stamp(value: Date): string {
   return value.toISOString();
+}
+
+function stampOrNull(value: Date | null): string | null {
+  return value ? stamp(value) : null;
 }
 
 function money(value: Prisma.Decimal, scale = 2): string {
@@ -56,6 +66,7 @@ export function organizationRow(row: Organization): OrganizationRow {
     name: row.name,
     slug: row.slug,
     monthly_allowance: row.monthly_allowance,
+    polling_enabled: row.polling_enabled,
     created_at: stamp(row.created_at),
   };
 }
@@ -102,10 +113,35 @@ export function fieldMappingRow(row: FieldMapping): FieldMappingRow {
 
 export function erpConnectionRow(row: ErpConnection): ErpConnectionRow {
   return {
-    legal_entity_id: id(row.legal_entity_id),
+    id: id(row.id),
+    organization_id: id(row.organization_id),
+    legal_entity_id: idOrNull(row.legal_entity_id),
     erp_code: row.erp_code,
+    label: row.label,
     status: row.status,
     connected_at: stamp(row.connected_at),
+    ingestion_mode: row.ingestion_mode,
+    endpoint_url: row.endpoint_url,
+    api_username: row.api_username,
+    api_secret: row.api_secret,
+    last_invoice_id: row.last_invoice_id,
+    last_polled_at: stampOrNull(row.last_polled_at),
+    next_poll_at: stampOrNull(row.next_poll_at),
+    last_error: row.last_error,
+    poll_locked_until: stampOrNull(row.poll_locked_until),
+  };
+}
+
+export function erpChangeRequestRow(row: ErpChangeRequest): ErpChangeRequestRow {
+  return {
+    id: id(row.id),
+    erp_connection_id: id(row.erp_connection_id),
+    organization_id: id(row.organization_id),
+    user_id: row.user_id,
+    action: row.action,
+    status: row.status,
+    created_at: stamp(row.created_at),
+    decided_at: stampOrNull(row.decided_at),
   };
 }
 

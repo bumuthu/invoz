@@ -1,0 +1,40 @@
+{
+  "branches": [
+    {
+      "ref": "tesla-branch-cmb",
+      "legal_entity_id": "tesla-entity",
+      "code": "CMB",
+      "name": "Colombo depot"
+    },
+    {
+      "ref": "tesla-branch-kdy",
+      "legal_entity_id": "tesla-entity",
+      "code": "KDY",
+      "name": "Kandy depot"
+    },
+    {
+      "ref": "tesla-branch-ho",
+      "legal_entity_id": "tesla-entity",
+      "code": "HO",
+      "name": "Head office"
+    },
+    {
+      "ref": "tesla-energy-branch-cmb",
+      "legal_entity_id": "tesla-energy",
+      "code": "CMB",
+      "name": "Colombo depot"
+    },
+    {
+      "ref": "tesla-energy-branch-kdy",
+      "legal_entity_id": "tesla-energy",
+      "code": "KDY",
+      "name": "Kandy depot"
+    },
+    {
+      "ref": "tesla-energy-branch-ho",
+      "legal_entity_id": "tesla-energy",
+      "code": "HO",
+      "name": "Head office"
+    }
+  ]
+}

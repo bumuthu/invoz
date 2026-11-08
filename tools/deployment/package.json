@@ -8,6 +8,8 @@
     "provision:lambda": "bash lambda.sh",
     "provision:ramis": "bash ramis-engine.sh",
     "provision:landing": "bash landing-service.sh",
-    "provision:sftp-user": "bash sftp-user.sh"
+    "provision:sftp-user": "bash sftp-user.sh",
+    "provision:erp-poll-lambda": "bash erp-poll-lambda.sh",
+    "provision:erp-poll-schedule": "bash erp-poll-schedule.sh"
   }
 }

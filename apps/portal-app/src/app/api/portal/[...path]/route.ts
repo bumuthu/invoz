@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import QRCode from "qrcode";
 import type { PortalRole } from "@invoz/common";
 import { portalRoles } from "@invoz/common";
-import { approveInbound, connectErp, correctAndResubmit, inviteMember, type DocumentCorrection } from "@/lib/actions";
+import {
+  approveInbound,
+  correctAndResubmit,
+  inviteMember,
+  requestErpChange,
+  requestPoll,
+  requestSftp,
+  type DocumentCorrection,
+} from "@/lib/actions";
 import {
   loadAudit,
   loadBranches,
@@ -100,10 +108,38 @@ async function writePortal(key: string, body: unknown) {
     return approveInbound(record.organizationId, ids);
   }
   if (key === "erp") {
-    if (typeof record.organizationId !== "string" || typeof record.entityId !== "string" || typeof record.erpCode !== "string") {
-      return { ok: false as const, error: "Legal entity not found." };
+    if (typeof record.organizationId !== "string") {
+      return { ok: false as const, error: "Organization not found." };
     }
-    return connectErp(record.organizationId, record.entityId, record.erpCode);
+    const legalEntityId = record.legalEntityId === null || typeof record.legalEntityId === "string" ? record.legalEntityId : undefined;
+    if ((record.action === "enable" || record.action === "disable") && typeof record.connectionId === "string") {
+      return requestErpChange(record.organizationId, record.connectionId, record.action);
+    }
+    if (record.action === "sftp" && typeof record.erpCode === "string" && legalEntityId !== undefined) {
+      return requestSftp(record.organizationId, record.erpCode, legalEntityId);
+    }
+    if (
+      record.action === "poll" &&
+      typeof record.erpCode === "string" &&
+      typeof record.label === "string" &&
+      typeof record.endpointUrl === "string" &&
+      typeof record.apiKey === "string" &&
+      (record.lastInvoiceId === null || typeof record.lastInvoiceId === "string") &&
+      (record.connectionId === null || typeof record.connectionId === "string") &&
+      legalEntityId !== undefined
+    ) {
+      return requestPoll({
+        organizationId: record.organizationId,
+        erpCode: record.erpCode,
+        label: record.label,
+        endpointUrl: record.endpointUrl,
+        apiKey: record.apiKey,
+        lastInvoiceId: record.lastInvoiceId,
+        legalEntityId,
+        connectionId: record.connectionId,
+      });
+    }
+    return { ok: false as const, error: "Integration request was not understood." };
   }
   if (key === "members") {
     if (typeof record.organizationId !== "string" || typeof record.email !== "string" || !isRole(record.role)) {

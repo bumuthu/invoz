@@ -1,0 +1,16 @@
+{
+  "legal_entities": [
+    {
+      "ref": "tesla-entity",
+      "organization_id": "tesla",
+      "name": "Tesla Pvt Ltd",
+      "tin": "203456789"
+    },
+    {
+      "ref": "tesla-energy",
+      "organization_id": "tesla",
+      "name": "Tesla Energy Pvt Ltd",
+      "tin": "304567890"
+    }
+  ]
+}

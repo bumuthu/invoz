@@ -83,17 +83,27 @@ export type ErpOption = {
 };
 
 export type ScheduleMapRow = {
+  erpCode: string;
   schedule: "01" | "04" | "07";
   erpField: string;
   ramisField: string;
 };
 
 export type ErpConnectionView = {
+  id: string;
   code: string;
   name: string;
-  entityId: string;
-  entityName: string;
+  label: string | null;
+  entityId: string | null;
+  entityName: string | null;
+  endpointUrl: string | null;
+  maskedApiKey: string | null;
   connectedAt: string;
+  ingestionMode: string;
+  status: string;
+  lastInvoiceId: string | null;
+  lastError: string | null;
+  pendingRequest: "enable" | "disable" | null;
 };
 
 export type EntityOption = {
@@ -201,7 +211,6 @@ export type PortalData = {
   query: string;
   erpCatalog: ErpOption[];
   erpConnections: ErpConnectionView[];
-  erpConnection: ErpConnectionView | null;
   scheduleMaps: ScheduleMapRow[];
   invoices: Invoice[];
   recent: Invoice[];

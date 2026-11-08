@@ -31,12 +31,12 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   const csv = await readInvoice(job.bucket, job.objectKey);
   if (csv === undefined) return;
 
-  const connection = await prisma.erpConnection.findUnique({
-    where: { legal_entity_id: BigInt(entity.id) },
+  const connections = await prisma.erpConnection.findMany({
+    where: { organization_id: BigInt(entity.organization_id) },
   });
-  if (!connection) throw new Error("legal entity has no connected ERP");
+  const erpCode = erpCodeForInvoice(job.objectKey, connections);
   const stored = await prisma.erpFieldMapping.findMany({
-    where: { erp_code: connection.erp_code, schedule: "01" },
+    where: { erp_code: erpCode, schedule: "01" },
   });
   const mappings = stored.flatMap((row) => {
     const target = pathTargets[row.ramis_field];
@@ -55,6 +55,26 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
     if (outcome === "rejected") rejected = true;
   }
   await moveInvoice(job.bucket, job.objectKey, rejected ? "rejected" : "processed");
+}
+
+const pollFile = /\/inbound\/poll-([a-z0-9_]+)-[^/]+\.csv$/;
+
+function erpCodeForInvoice(
+  objectKey: string,
+  connections: { erp_code: string; ingestion_mode: string }[],
+): string {
+  const polled = pollFile.exec(objectKey);
+  if (polled) {
+    const code = polled[1];
+    if (!connections.some((row) => row.erp_code === code && row.ingestion_mode === "poll")) {
+      throw new Error(`organization has no ${code} poll integration`);
+    }
+    return code;
+  }
+  const sftp = connections.filter((row) => row.ingestion_mode === "sftp");
+  if (sftp.length === 1) return sftp[0].erp_code;
+  if (sftp.length === 0) throw new Error("organization has no connected ERP");
+  throw new Error("organization has more than one SFTP integration");
 }
 
 async function legalEntity(legalEntityId: number, organizationId: number): Promise<Entity> {
