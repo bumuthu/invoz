@@ -1,5 +1,5 @@
 import { prisma } from "@invoz/database";
-import { loadSeed } from "../seeders";
+import { loadSeed, loadSystemSeed } from "../seeders";
 import { applySeeds } from "./apply-seed";
 
 function usage(): string {
@@ -21,7 +21,7 @@ async function main() {
   }
 
   const document = loadSeed(env, slug);
-  await applySeeds([document]);
+  await applySeeds([loadSystemSeed(), document]);
 
   const organization = await prisma.organization.findUnique({
     where: { slug },

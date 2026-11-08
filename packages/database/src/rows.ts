@@ -4,7 +4,6 @@ import type {
   ErpChangeRequest,
   ErpConnection,
   ErpFieldMapping,
-  FieldMapping,
   InboundAdjustment,
   InboundInvoice,
   InvoiceUsage,
@@ -23,7 +22,6 @@ import type {
   ErpChangeRequestRow,
   ErpConnectionRow,
   ErpFieldMappingRow,
-  FieldMappingRow,
   InboundAdjustmentRow,
   InboundInvoiceRow,
   InvoiceUsageRow,
@@ -35,6 +33,7 @@ import type {
   RamisCredentialRow,
   SerialCounterRow,
 } from "@invoz/common";
+import { readErpFieldMap } from "@invoz/common";
 
 function id(value: bigint): number {
   return Number(value);
@@ -102,15 +101,6 @@ export function membershipRow(row: Membership): MembershipRow {
   };
 }
 
-export function fieldMappingRow(row: FieldMapping): FieldMappingRow {
-  return {
-    id: id(row.id),
-    legal_entity_id: id(row.legal_entity_id),
-    source_column: row.source_column,
-    target_field: row.target_field,
-  };
-}
-
 export function erpConnectionRow(row: ErpConnection): ErpConnectionRow {
   return {
     id: id(row.id),
@@ -147,11 +137,9 @@ export function erpChangeRequestRow(row: ErpChangeRequest): ErpChangeRequestRow 
 
 export function erpFieldMappingRow(row: ErpFieldMapping): ErpFieldMappingRow {
   return {
-    id: id(row.id),
     erp_code: row.erp_code,
     schedule: row.schedule,
-    ramis_field: row.ramis_field,
-    erp_field: row.erp_field,
+    mapping: readErpFieldMap(row.mapping),
   };
 }
 

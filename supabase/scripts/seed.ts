@@ -1,11 +1,11 @@
 import { prisma } from "@invoz/database";
-import { listSeedSlugs, loadSeed } from "../seeders";
+import { listSeedSlugs, loadSeed, loadSystemSeed } from "../seeders";
 import { applySeeds } from "./apply-seed";
 
 function usage(): string {
   return `Usage: npm run seed -- <stag|prod>
 
-Inserts every organization under supabase/seeders/<env>/.`;
+Inserts supabase/seeders/system, then every organization under supabase/seeders/<env>/.`;
 }
 
 async function main() {
@@ -22,7 +22,7 @@ async function main() {
   if (slugs.length === 0) {
     throw new Error(`supabase/seeders/${env} has no organizations`);
   }
-  await applySeeds(slugs.map((slug) => loadSeed(env, slug)));
+  await applySeeds([loadSystemSeed(), ...slugs.map((slug) => loadSeed(env, slug))]);
 }
 
 main()

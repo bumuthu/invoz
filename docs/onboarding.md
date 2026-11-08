@@ -18,7 +18,7 @@ npm run onboard:sftp -- stag acme
 
 | Command | What it does |
 | --- | --- |
-| `npm run onboard -- <stag\|prod> <slug>` | Creates the organization, legal entities, branches, field mappings, serial counters, and the owner account from `supabase/seeders/<env>/<slug>/`. |
+| `npm run onboard -- <stag\|prod> <slug>` | Creates the organization, legal entities, branches, serial counters, and the owner account from `supabase/seeders/<env>/<slug>/`. |
 | `npm run onboard:sftp -- <stag\|prod> <slug>` | Creates the SFTP folder `uploads/{organization id}/` and a password. Writes `supabase/seeders/<env>/<slug>/sftp.json` and `tools/invoice-uploader/sftp/<slug>.env`. |
 | `npm run onboard:sftp -- <stag\|prod> <slug> --rotate` | Replaces the SFTP password and rewrites `sftp.json`. |
 
@@ -119,24 +119,9 @@ The owner invites everyone else from Users in the portal. Add no other membershi
 }
 ```
 
-### `field_mappings.json`
+### Invoice columns
 
-`source_column` is the header text in the customer's CSV. `target_field` is one of:
-
-| `target_field` | Required |
-| --- | --- |
-| `Invoice date` | Yes. Value is `YYYY-MM-DD`. |
-| `Supply date` | Yes. Value is `YYYY-MM-DD`. |
-| `Buyer TIN` | Yes. 9 digits. |
-| `Buyer name` | Yes. |
-| `Branch code` | Yes, unless the file is always for one branch. The value must match `branches.code`. |
-| `Net amount` | Yes. Numeric. |
-| `VAT amount` | Yes. Numeric. |
-| `ERP reference` | Use this when the invoice number column name does not contain "invoice no". |
-| `Invoice type` | Optional. |
-| `Ignore` | A column the pipeline does not read. |
-
-A column whose header matches `invoice no` is the invoice number when `ERP reference` is not mapped. Map that column to `Ignore` in that case, the same way `supabase/seeders/stag/talentuner/field_mappings.json` does.
+Column headers come from the connected ERP's schedule 01 map. That map is system data in `supabase/seeders/system/erp_field_mappings.json`: one JSON object per ERP and schedule, each key a CSV column and each value the RAMIS field. A header that matches `invoice no` is the invoice number when that map has no `header.erp_reference` column.
 
 ### `serial_counters.json`
 

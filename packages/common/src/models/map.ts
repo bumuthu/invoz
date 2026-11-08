@@ -4,7 +4,6 @@ import type {
   ErpChangeRequest,
   ErpConnection,
   ErpFieldMapping,
-  FieldMapping,
   InboundAdjustment,
   InboundInvoice,
   InvoiceUsage,
@@ -22,7 +21,6 @@ import type {
   ErpChangeRequestRow,
   ErpConnectionRow,
   ErpFieldMappingRow,
-  FieldMappingRow,
   InboundAdjustmentRow,
   InboundInvoiceRow,
   InvoiceUsageRow,
@@ -77,15 +75,6 @@ export function toMembership(row: MembershipRow): Membership {
   };
 }
 
-export function toFieldMapping(row: FieldMappingRow): FieldMapping {
-  return {
-    id: row.id,
-    legalEntityId: row.legal_entity_id,
-    sourceColumn: row.source_column,
-    targetField: row.target_field,
-  };
-}
-
 export function toErpConnection(row: ErpConnectionRow): ErpConnection {
   return {
     id: row.id,
@@ -121,11 +110,9 @@ export function toErpChangeRequest(row: ErpChangeRequestRow): ErpChangeRequest {
 
 export function toErpFieldMapping(row: ErpFieldMappingRow): ErpFieldMapping {
   return {
-    id: row.id,
     erpCode: row.erp_code,
     schedule: row.schedule,
-    ramisField: row.ramis_field,
-    erpField: row.erp_field,
+    mapping: row.mapping,
   };
 }
 

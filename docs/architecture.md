@@ -47,7 +47,7 @@ flowchart LR
 | Storage | Amazon S3 | One bucket, `invoz-{env}-invoices`. `{env}` is `APP_ENV`: `stag` or `prod`. Each organization is the prefix `uploads/{organization_id}/`. Object-created events for `.csv` files only. `.csv.tmp` uploads are ignored. Sibling prefixes: `processed`, `rejected`, `acknowledgments`. |
 | Routing | Amazon EventBridge | Forwards a created-object event into the FIFO queue. |
 | Sequencing | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline.fifo` | `MessageGroupId = {legalEntityId}:{branchCode}` so one branch of one legal entity is strictly ordered. `MessageDeduplicationId` is the file SHA-256. Visibility timeout is 5 minutes. |
-| Worker | AWS Lambda `invoz-{env}-invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@invoz/invoice-engine`. Parses the file with that legal entity's field mapping, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
+| Worker | AWS Lambda `invoz-{env}-invoice-engine` | Event source mapping, batch size 1 to 5. Runs `@invoz/invoice-engine`. Parses the file with that ERP's schedule 01 field map, checks TIN, dates, and VAT, allocates the Gazette serial in Supabase, and posts to the RAMIS engine through API Gateway. |
 | RAMIS stand-in | AWS Lambda `invoz-{env}-ramis-engine` | One function behind an HTTP API of the same name. Every route is handled by `handler` in `tools/ramis-engine/src/lambda.ts`. |
 | Certificates | AWS Secrets Manager | RAMIS client certificate and private key, encrypted with KMS. `ramis_credentials.certificate_secret_arn` stores the ARN. |
 | Failures | Amazon SQS FIFO `invoz-{env}-invoicing-pipeline-dlq.fifo` | Messages that still fail after 3 receives. Unparseable files and permanent 4xx outcomes are recorded as rejected before that. |
@@ -65,7 +65,7 @@ Webhook ingestion uses the same queue and the same worker. The job `source` is `
 3. S3 emits an object-created event to EventBridge.
 4. EventBridge sends a message to `invoz-{env}-invoicing-pipeline.fifo` with `MessageGroupId = {legalEntityId}:{branchCode}`.
 5. Lambda reads the message and runs `handler` from `@invoz/invoice-engine`:
-   * download and parse the file with the legal entity field mapping
+   * download and parse the file with the ERP schedule 01 field map
    * check 9-digit TINs, separate invoice and supply dates, and VAT math
    * open one Prisma transaction, allocate `YYMMM_QQQQ_XXXXX`, and insert the queued invoice
    * POST the payload to the RAMIS engine at `RAMIS_API_URL` inside that transaction
@@ -139,7 +139,7 @@ Row-Level Security is enabled on every table, and `anon` and `authenticated` hav
 Tables:
 
 * `organizations`, `legal_entities`, `branches`, `memberships`
-* `field_mappings`, `ramis_credentials`, `serial_counters`
+* `erp_field_mappings`, `ramis_credentials`, `serial_counters`
 * `outbound_invoices`, `outbound_adjustments`
 * `inbound_invoices`, `inbound_adjustments`
 * `invoice_usage`, `audit_logs`
@@ -163,7 +163,7 @@ Tables:
 2. Memberships are loaded for that `user_id`. None redirects to `/auth/login?error=membership`.
 3. The organization is one of those memberships. On `{slug}.app.invoz.lk` the slug must match the host. Staging uses `{slug}.app-stag.invoz.lk`. `app.invoz.lk` (or `app-stag.invoz.lk` on staging) and `localhost` have no organization yet, so they show that login form. `PORTAL_REQUIRE_ORG_HOST=true` sends a successful login to the organization host and sends every other default host, including localhost, to `https://app.invoz.lk/auth/login` (`https://app-stag.invoz.lk/auth/login` when the request is already on staging). `false` keeps the session on the root URL for testing.
 4. A host the user does not belong to redirects to `/auth/login?error=membership`.
-5. Legal entity, branches, invoices, adjustments, inbound invoices, field mappings, serials, usage, and the member list are queried with that organization id and its legal entity id.
+5. Legal entity, branches, invoices, adjustments, inbound invoices, serials, usage, and the member list are queried with that organization id and its legal entity id. Field maps are read from the connected ERP.
 
 Sign out is in the sidebar. It clears the session and returns to `/auth/login`.
 
@@ -205,7 +205,7 @@ An `InvoiceJob` has `organizationId`, `legalEntityId`, `branchCode`, and `source
 
 ## Onboarding
 
-A new organization is a folder, `supabase/seeders/<env>/<slug>/`. `<env>` is `stag` or `prod`. `owner.json` holds the owner account, password, and membership. The other JSON files hold the organization, legal entities, branches, field mappings, and serial counters. `npm run onboard -- <env> <slug>` creates those rows and the owner account. The owner then invites everyone else from Users. SFTP is a separate step and uses the same environment and slug. The numeric organization id comes from the database.
+A new organization is a folder, `supabase/seeders/<env>/<slug>/`. `<env>` is `stag` or `prod`. `owner.json` holds the owner account, password, and membership. The other JSON files hold the organization, legal entities, branches, and serial counters. ERP field maps are not part of the organization: they live in `supabase/seeders/system`. `npm run onboard -- <env> <slug>` creates those rows and the owner account, and fills in any missing system field maps. The owner then invites everyone else from Users. SFTP is a separate step and uses the same environment and slug. The numeric organization id comes from the database.
 
 ```bash
 npm run onboard -- stag talentuner
@@ -224,7 +224,7 @@ Run the same environment and slug again to add a row that was missing. It does n
 | `npm run typecheck` | Every workspace package |
 | `npm run migrate` | `supabase/scripts/migrate.ts` |
 | `npm run migrate:ramis` | `tools/ramis-engine/scripts/migrate.ts` |
-| `npm run seed -- <stag\|prod>` | `supabase/scripts/seed.ts` for that environment |
+| `npm run seed -- <stag\|prod>` | `supabase/scripts/seed.ts` for `supabase/seeders/system` and that environment |
 | `npm run onboard -- <stag\|prod> <slug>` | Creates one organization from `supabase/seeders/<env>/<slug>/` |
 | `npm run onboard:sftp -- <stag\|prod> <slug>` | SFTP password for that slug. The hash is stored in `sftp_credentials`. The password is stored in `seeders/<env>/<slug>/sftp.json` and `tools/invoice-uploader/sftp/<slug>.env` |
 | `npm run sync:invoices -- stag <slug>` | Uploads `tools/invoice-uploader/invoices/stag/<slug>/` with that env file |

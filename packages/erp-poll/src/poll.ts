@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { readErpFieldMap } from "@invoz/common";
 import { prisma } from "@invoz/database";
 import { csvHeaders, invoiceCsv, invoiceObjectKey, type BranchRef, type PolledInvoice } from "./billing";
 import { pollBillingDocuments } from "./sap";
@@ -69,11 +70,13 @@ async function pollConnection(connection: Claimed): Promise<void> {
       select: { id: true, code: true },
     })
   ).map((branch): BranchRef => ({ id: Number(branch.id), code: branch.code }));
-  const stored = await prisma.erpFieldMapping.findMany({
-    where: { erp_code: connection.erp_code, schedule: "01" },
-    select: { ramis_field: true, erp_field: true },
+  const stored = await prisma.erpFieldMapping.findUnique({
+    where: { erp_code_schedule: { erp_code: connection.erp_code, schedule: "01" } },
   });
-  const headers = csvHeaders(stored.map((row) => ({ ramisField: row.ramis_field, erpField: row.erp_field })));
+  if (!stored) throw new Error(`field mapping has no schedule 01 for ${connection.erp_code}`);
+  const headers = csvHeaders(
+    Object.entries(readErpFieldMap(stored.mapping)).map(([erpField, ramisField]) => ({ ramisField, erpField })),
+  );
   const bucket = process.env.INVOICE_BUCKET;
   if (!bucket) throw new Error("INVOICE_BUCKET is required");
 

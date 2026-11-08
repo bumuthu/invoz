@@ -41,13 +41,6 @@ export type MembershipRow = {
   created_at: string;
 };
 
-export type FieldMappingRow = {
-  id: RowId;
-  legal_entity_id: RowId;
-  source_column: string;
-  target_field: string;
-};
-
 export type ErpConnectionRow = {
   id: RowId;
   organization_id: RowId;
@@ -79,11 +72,9 @@ export type ErpChangeRequestRow = {
 };
 
 export type ErpFieldMappingRow = {
-  id: RowId;
   erp_code: string;
   schedule: string;
-  ramis_field: string;
-  erp_field: string;
+  mapping: Record<string, string>;
 };
 
 export type RamisCredentialRow = {
@@ -215,7 +206,6 @@ export type Tables = {
   legal_entities: LegalEntityRow;
   branches: BranchRow;
   memberships: MembershipRow;
-  field_mappings: FieldMappingRow;
   erp_connections: ErpConnectionRow;
   erp_change_requests: ErpChangeRequestRow;
   erp_field_mappings: ErpFieldMappingRow;
@@ -236,7 +226,6 @@ export const tableColumns = {
   legal_entities: ["id", "organization_id", "name", "tin", "vat_number", "created_at"],
   branches: ["id", "legal_entity_id", "code", "name", "created_at"],
   memberships: ["id", "user_id", "organization_id", "role", "created_at"],
-  field_mappings: ["id", "legal_entity_id", "source_column", "target_field"],
   erp_connections: [
     "id",
     "organization_id",
@@ -265,7 +254,7 @@ export const tableColumns = {
     "created_at",
     "decided_at",
   ],
-  erp_field_mappings: ["id", "erp_code", "schedule", "ramis_field", "erp_field"],
+  erp_field_mappings: ["erp_code", "schedule", "mapping"],
   ramis_credentials: ["legal_entity_id", "certificate_secret_arn", "updated_at"],
   serial_counters: ["branch_id", "legal_entity_id", "period", "last_value"],
   outbound_invoices: [

@@ -5,7 +5,6 @@ export {
   erpChangeRequestRow,
   erpConnectionRow,
   erpFieldMappingRow,
-  fieldMappingRow,
   inboundAdjustmentRow,
   inboundInvoiceRow,
   invoiceUsageRow,

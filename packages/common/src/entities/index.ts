@@ -61,13 +61,6 @@ export type Membership = {
   createdAt: string;
 };
 
-export type FieldMapping = {
-  id: RowId;
-  legalEntityId: RowId;
-  sourceColumn: string;
-  targetField: string;
-};
-
 export type ErpConnection = {
   id: RowId;
   organizationId: RowId;
@@ -98,12 +91,24 @@ export type ErpChangeRequest = {
 };
 
 export type ErpFieldMapping = {
-  id: RowId;
   erpCode: string;
   schedule: string;
-  ramisField: string;
-  erpField: string;
+  mapping: Record<string, string>;
 };
+
+export function readErpFieldMap(value: unknown): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("ERP field mapping must be an object");
+  }
+  const mapping: Record<string, string> = {};
+  for (const [erpField, ramisField] of Object.entries(value)) {
+    if (!erpField || typeof ramisField !== "string" || ramisField === "") {
+      throw new Error("ERP field mapping must map each ERP field to a RAMIS field");
+    }
+    mapping[erpField] = ramisField;
+  }
+  return mapping;
+}
 
 export type RamisCredential = {
   legalEntityId: RowId;

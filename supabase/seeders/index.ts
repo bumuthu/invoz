@@ -148,3 +148,29 @@ export function loadSeed(env: string, slug: string): SeedDocument {
 
   return document;
 }
+
+export function loadSystemSeed(): SeedDocument {
+  const directory = path.join(seedersRoot, "system");
+  const location = "supabase/seeders/system";
+  let fileNames: string[];
+  try {
+    fileNames = readdirSync(directory).filter((name) => name.endsWith(".json")).sort();
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      throw new Error(`seeder not found: ${location}`);
+    }
+    throw error;
+  }
+  if (fileNames.length === 0) {
+    throw new Error(`${location} has no seed files`);
+  }
+
+  const document: SeedDocument = {};
+  for (const name of fileNames) {
+    appendRows(document, `system/${name}`, readJson(path.join(directory, name)));
+  }
+  if ((document.erp_field_mappings ?? []).length === 0) {
+    throw new Error(`${location} needs erp_field_mappings`);
+  }
+  return document;
+}

@@ -195,17 +195,6 @@ async function findExisting(
           },
         }),
       );
-    case "field_mappings":
-      return kept(
-        await tx.fieldMapping.findUnique({
-          where: {
-            legal_entity_id_source_column: {
-              legal_entity_id: requiredBigInt(data, "legal_entity_id"),
-              source_column: requiredString(data, "source_column"),
-            },
-          },
-        }),
-      );
     case "erp_connections": {
       const rows = await tx.erpConnection.findMany({
         where: {
@@ -238,10 +227,9 @@ async function findExisting(
       return kept(
         await tx.erpFieldMapping.findUnique({
           where: {
-            erp_code_schedule_ramis_field: {
+            erp_code_schedule: {
               erp_code: requiredString(data, "erp_code"),
               schedule: requiredString(data, "schedule"),
-              ramis_field: requiredString(data, "ramis_field"),
             },
           },
         }),
@@ -358,8 +346,6 @@ async function createRow(tx: Prisma.TransactionClient, table: TableName, data: R
       return tx.branch.create({ data: data as Prisma.BranchUncheckedCreateInput });
     case "memberships":
       return tx.membership.create({ data: data as Prisma.MembershipUncheckedCreateInput });
-    case "field_mappings":
-      return tx.fieldMapping.create({ data: data as Prisma.FieldMappingUncheckedCreateInput });
     case "erp_connections":
       return tx.erpConnection.create({ data: data as Prisma.ErpConnectionUncheckedCreateInput });
     case "erp_change_requests":

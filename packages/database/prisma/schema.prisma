@@ -96,7 +96,6 @@ model LegalEntity {
 
   organization        Organization         @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   branches            Branch[]
-  fieldMappings       FieldMapping[]
   ramisCredential     RamisCredential?
   serialCounters      SerialCounter[]
   outboundInvoices    OutboundInvoice[]
@@ -154,13 +153,11 @@ model ErpChangeRequest {
 }
 
 model ErpFieldMapping {
-  id          BigInt @id @default(autoincrement())
-  erp_code    String
-  schedule    String
-  ramis_field String
-  erp_field   String
+  erp_code String
+  schedule String
+  mapping  Json
 
-  @@unique([erp_code, schedule, ramis_field], map: "erp_field_mappings_erp_schedule_field_uidx")
+  @@id([erp_code, schedule])
   @@map("erp_field_mappings")
 }
 
@@ -191,18 +188,6 @@ model Membership {
 
   @@unique([user_id, organization_id])
   @@map("memberships")
-}
-
-model FieldMapping {
-  id              BigInt @id @default(autoincrement())
-  legal_entity_id BigInt
-  source_column   String
-  target_field    String
-
-  legalEntity LegalEntity @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade)
-
-  @@unique([legal_entity_id, source_column])
-  @@map("field_mappings")
 }
 
 model RamisCredential {

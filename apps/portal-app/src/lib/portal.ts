@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
-import { formatGazetteSerial, portalRoleLabel, portalRoles, type PortalRole } from "@invoz/common";
+import { formatGazetteSerial, portalRoleLabel, portalRoles, readErpFieldMap, type PortalRole } from "@invoz/common";
 import {
   branchRow,
   invoiceUsageRow,
@@ -713,6 +713,11 @@ export const loadErp = cache(async () => {
   };
 });
 
+function scheduleCode(value: string): "01" | "04" | "07" | null {
+  if (value === "01" || value === "04" || value === "07") return value;
+  return null;
+}
+
 export const loadMapping = cache(async () => {
   const scope = await loadScope();
   const selectedId = scope.appliedFilters.entityId === "all" ? null : scope.entityIds[0];
@@ -731,15 +736,22 @@ export const loadMapping = cache(async () => {
   const mapRecords = codes.length
     ? await prisma.erpFieldMapping.findMany({
         where: { erp_code: { in: codes }, schedule: { in: ["01", "04", "07"] } },
-        orderBy: [{ erp_code: "asc" }, { schedule: "asc" }, { ramis_field: "asc" }],
-        select: { erp_code: true, schedule: true, erp_field: true, ramis_field: true },
+        orderBy: [{ erp_code: "asc" }, { schedule: "asc" }],
+        select: { erp_code: true, schedule: true, mapping: true },
       })
     : [];
-  const scheduleMaps = mapRecords.flatMap((row): ScheduleMapRow[] =>
-    row.schedule === "01" || row.schedule === "04" || row.schedule === "07"
-      ? [{ erpCode: row.erp_code, schedule: row.schedule, erpField: row.erp_field, ramisField: row.ramis_field }]
-      : [],
-  );
+  const scheduleMaps = mapRecords.flatMap((row): ScheduleMapRow[] => {
+    const schedule = scheduleCode(row.schedule);
+    if (!schedule) return [];
+    return Object.entries(readErpFieldMap(row.mapping))
+      .map(([erpField, ramisField]) => ({
+        erpCode: row.erp_code,
+        schedule,
+        erpField,
+        ramisField,
+      }))
+      .sort((left, right) => left.ramisField.localeCompare(right.ramisField));
+  });
   return {
     erpConnections: connections.map((row) => connectionView(row, entityName, null)),
     scheduleMaps,

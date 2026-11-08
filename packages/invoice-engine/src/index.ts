@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
-import { isSettledInvoiceKey, isTin, parseInvoiceJob, parseResubmitJob, type InvoiceClass } from "@invoz/common";
+import { isSettledInvoiceKey, isTin, parseInvoiceJob, parseResubmitJob, readErpFieldMap, type InvoiceClass } from "@invoz/common";
 import { prisma, type Prisma } from "@invoz/database";
 import type { SQSHandler } from "aws-lambda";
 import { alertRamisClearedCommitFailed } from "./alert";
@@ -31,17 +31,7 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   const csv = await readInvoice(job.bucket, job.objectKey);
   if (csv === undefined) return;
 
-  const connections = await prisma.erpConnection.findMany({
-    where: { organization_id: BigInt(entity.organization_id) },
-  });
-  const erpCode = erpCodeForInvoice(job.objectKey, connections);
-  const stored = await prisma.erpFieldMapping.findMany({
-    where: { erp_code: erpCode, schedule: "01" },
-  });
-  const mappings = stored.flatMap((row) => {
-    const target = pathTargets[row.ramis_field];
-    return target ? [{ source_column: row.erp_field, target_field: target }] : [];
-  });
+  const mappings = await mappingsForInvoice(entity, job.objectKey);
   const branch = job.branchId
     ? await prisma.branch.findFirst({
         where: { id: BigInt(job.branchId), legal_entity_id: BigInt(entity.id) },
@@ -59,19 +49,40 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
 
 const pollFile = /\/inbound\/poll-([a-z0-9_]+)-[^/]+\.csv$/;
 
-function erpCodeForInvoice(
+async function mappingsForInvoice(
+  entity: Entity,
   objectKey: string,
-  connections: { erp_code: string; ingestion_mode: string }[],
-): string {
+): Promise<{ source_column: string; target_field: string }[]> {
+  const erpCode = await erpCodeForInvoice(entity.organization_id, objectKey);
+  const stored = await prisma.erpFieldMapping.findUnique({
+    where: { erp_code_schedule: { erp_code: erpCode, schedule: "01" } },
+  });
+  if (!stored) throw new Error(`field mapping has no schedule 01 for ${erpCode}`);
+  return Object.entries(readErpFieldMap(stored.mapping)).flatMap(([erpField, ramisField]) => {
+    const target = pathTargets[ramisField];
+    return target ? [{ source_column: erpField, target_field: target }] : [];
+  });
+}
+
+async function erpCodeForInvoice(organizationId: number, objectKey: string): Promise<string> {
   const polled = pollFile.exec(objectKey);
   if (polled) {
     const code = polled[1];
-    if (!connections.some((row) => row.erp_code === code && row.ingestion_mode === "poll")) {
-      throw new Error(`organization has no ${code} poll integration`);
-    }
+    const connection = await prisma.erpConnection.findFirst({
+      where: {
+        organization_id: BigInt(organizationId),
+        erp_code: code,
+        ingestion_mode: "poll",
+      },
+      select: { id: true },
+    });
+    if (!connection) throw new Error(`organization has no ${code} poll integration`);
     return code;
   }
-  const sftp = connections.filter((row) => row.ingestion_mode === "sftp");
+  const sftp = await prisma.erpConnection.findMany({
+    where: { organization_id: BigInt(organizationId), ingestion_mode: "sftp" },
+    select: { erp_code: true },
+  });
   if (sftp.length === 1) return sftp[0].erp_code;
   if (sftp.length === 0) throw new Error("organization has no connected ERP");
   throw new Error("organization has more than one SFTP integration");
