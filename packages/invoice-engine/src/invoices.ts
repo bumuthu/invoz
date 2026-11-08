@@ -1,4 +1,5 @@
 import { isTin } from "@invoz/common";
+import { invoiceFields, optionalColumn, requireColumn } from "./columns";
 import { parseCsv } from "./csv";
 
 export type MappedInvoice = {
@@ -14,89 +15,38 @@ export type MappedInvoice = {
   invoiceType?: string;
 };
 
-const fields = {
-  "Invoice date": "invoiceDate",
-  "Supply date": "supplyDate",
-  "Buyer TIN": "buyerTin",
-  "Buyer name": "buyerName",
-  "Branch code": "branchCode",
-  "Net amount": "netAmount",
-  "VAT amount": "vatAmount",
-} as const;
-
-type FieldKey = (typeof fields)[keyof typeof fields];
-
-const optionalFields = {
-  "Invoice type": "invoiceType",
-  "ERP reference": "erpReference",
-} as const;
-
-export function invoicesFromCsv(
-  csv: string,
-  mappings: { source_column: string; target_field: string }[],
-  defaultBranchCode?: string,
-): MappedInvoice[] {
+export function invoicesFromCsv(csv: string, mapping: Record<string, string>, branchCode: string): MappedInvoice[] {
+  if (!branchCode) throw new Error("invoice file is not in a branch folder");
   const rows = parseCsv(csv);
   const header = rows[0];
-  if (!header) {
-    throw new Error("invoice file has no header");
-  }
+  if (!header) throw new Error("invoice file has no header");
 
-  const columns = new Map<FieldKey | "invoiceType" | "erpReference", number>();
-  for (const mapping of mappings) {
-    const field =
-      fields[mapping.target_field as keyof typeof fields] ??
-      optionalFields[mapping.target_field as keyof typeof optionalFields];
-    if (!field) continue;
-    const index = header.indexOf(mapping.source_column);
-    if (index < 0) {
-      throw new Error(`invoice file is missing column ${mapping.source_column}`);
-    }
-    columns.set(field, index);
-  }
-  for (const [target, field] of Object.entries(fields)) {
-    if (field === "branchCode" && defaultBranchCode) continue;
-    if (!columns.has(field)) {
-      throw new Error(`field mapping has no ${target} column`);
-    }
-  }
+  const columns = new Map<string, number>();
+  for (const field of invoiceFields) columns.set(field, requireColumn(header, mapping, field));
+  const typeIndex = optionalColumn(header, mapping, "header.invoice_type");
 
-  const referenceIndex = columns.get("erpReference") ?? header.findIndex((name) => /invoice\s*no/i.test(name));
-  if (referenceIndex < 0) {
-    throw new Error("invoice file is missing the invoice number column");
-  }
-
+  const read = (row: string[], field: (typeof invoiceFields)[number]) => (row[columns.get(field) ?? -1] ?? "").trim();
   const invoices: MappedInvoice[] = [];
   for (const row of rows.slice(1)) {
     if (row.every((value) => value.trim() === "")) continue;
-    const read = (field: FieldKey) => (row[columns.get(field) ?? -1] ?? "").trim();
-    const netAmount = money(read("netAmount"), "Net amount");
-    const vatAmount = money(read("vatAmount"), "VAT amount");
-    const buyerTin = read("buyerTin");
-    if (!isTin(buyerTin)) {
-      throw new Error("buyer TIN must be 9 digits");
-    }
-    const invoiceDate = date(read("invoiceDate"), "Invoice date");
-    const supplyDate = date(read("supplyDate"), "Supply date");
+    const netAmount = money(read(row, "currency_summary.total_value_excluding_vat"), "currency_summary.total_value_excluding_vat");
+    const vatAmount = money(read(row, "currency_summary.total_vat_amount"), "currency_summary.total_vat_amount");
+    const buyerTin = read(row, "purchaser.tin");
+    if (!isTin(buyerTin)) throw new Error("buyer TIN must be 9 digits");
     invoices.push({
-      erpReference: (row[referenceIndex] ?? "").trim(),
-      invoiceDate,
-      supplyDate,
+      erpReference: required(read(row, "header.erp_reference"), "header.erp_reference"),
+      invoiceDate: date(read(row, "header.invoice_date"), "header.invoice_date"),
+      supplyDate: date(read(row, "header.supply_date"), "header.supply_date"),
       buyerTin,
-      buyerName: required(read("buyerName"), "Buyer name"),
-      branchCode: defaultBranchCode && !columns.has("branchCode") ? defaultBranchCode : required(read("branchCode"), "Branch code"),
+      buyerName: required(read(row, "purchaser.name"), "purchaser.name"),
+      branchCode,
       netAmount,
       vatAmount,
       totalAmount: (Number(netAmount) + Number(vatAmount)).toFixed(2),
-      invoiceType: columns.has("invoiceType") ? (row[columns.get("invoiceType") ?? -1] ?? "").trim() : undefined,
+      invoiceType: typeIndex === undefined ? undefined : (row[typeIndex] ?? "").trim(),
     });
   }
-  if (invoices.length === 0) {
-    throw new Error("invoice file has no invoices");
-  }
-  if (invoices.some((invoice) => invoice.erpReference === "")) {
-    throw new Error("invoice number is required");
-  }
+  if (invoices.length === 0) throw new Error("invoice file has no invoices");
   return invoices;
 }
 
@@ -106,15 +56,11 @@ function required(value: string, field: string): string {
 }
 
 function date(value: string, field: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error(`${field} must be YYYY-MM-DD`);
-  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${field} must be YYYY-MM-DD`);
   return value;
 }
 
 function money(value: string, field: string): string {
-  if (!/^\d+(\.\d+)?$/.test(value)) {
-    throw new Error(`${field} must be numeric`);
-  }
+  if (!/^\d+(\.\d+)?$/.test(value)) throw new Error(`${field} must be numeric`);
   return Number(value).toFixed(2);
 }

@@ -1,2 +1,2 @@
-Column 1 · Invoice no.,Column 2 · Invoice date,Column 3 · Supply date,Column 4 · Buyer TIN,Column 5 · Buyer name,Column 6 · Branch,Column 7 · Net amount,Column 8 · VAT
-inv_1038,2026-10-13,2026-10-13,102345678,Internal transfer,CMB,0.00,0.00
+header.erp_reference,header.invoice_date,header.supply_date,purchaser.tin,purchaser.name,currency_summary.total_value_excluding_vat,currency_summary.total_vat_amount,header.invoice_type
+inv_1038,2026-10-13,2026-10-13,102345678,Internal transfer,0.00,0.00,

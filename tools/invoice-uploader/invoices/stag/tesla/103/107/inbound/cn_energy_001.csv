@@ -1,0 +1,2 @@
+header.adjustment_serial_number,header.adjustment_type,header.adjustment_date,header.original_invoice_serial_number,header.original_invoice_date,header.adjustment_reason,purchaser.tin,purchaser.name,adjustment_values.adjusted_value_excluding_vat,adjustment_values.vat_rate,adjustment_values.adjusted_vat_amount,adjustment_values.adjusted_total_consideration
+cn_energy_001,TAX_CREDIT_NOTE,2026-11-08,inv_energy_001,2026-11-08,Goods returned,245678901,Hill Country Traders,80000.00,18,14400.00,94400.00

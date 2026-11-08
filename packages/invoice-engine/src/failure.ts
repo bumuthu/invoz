@@ -1,3 +1,10 @@
+export class RetryLater extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RetryLater";
+  }
+}
+
 export function messageOf(error: unknown): string {
   if (error instanceof Error && error.message.trim() !== "") return error.message;
   return "invoice handling failed";

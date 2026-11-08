@@ -3,22 +3,14 @@ import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, S3
 import { isSettledInvoiceKey, isTin, parseInvoiceJob, parseResubmitJob, readErpFieldMap, type InvoiceClass, type InvoiceJob } from "@invoz/common";
 import { prisma, type Prisma } from "@invoz/database";
 import type { SQSHandler } from "aws-lambda";
+import { adjustmentsFromCsv, submitMappedAdjustment } from "./adjustments";
 import { alertRamisClearedCommitFailed } from "./alert";
-import { isTransient, isUniqueConflict, messageOf } from "./failure";
+import { invoiceMapping, isAdjustmentHeader } from "./columns";
+import { parseCsv } from "./csv";
+import { RetryLater, isTransient, isUniqueConflict, messageOf } from "./failure";
 import { invoicesFromCsv, type MappedInvoice } from "./invoices";
 import { processResubmit } from "./resubmit";
 import { idempotencyKey, ramisPayload, submitInvoice, type Clearance } from "@invoz/common/ramis";
-
-const pathTargets: Record<string, string> = {
-  "header.invoice_date": "Invoice date",
-  "header.supply_date": "Supply date",
-  "purchaser.tin": "Buyer TIN",
-  "purchaser.name": "Buyer name",
-  "currency_summary.total_value_excluding_vat": "Net amount",
-  "currency_summary.total_vat_amount": "VAT amount",
-  "header.invoice_type": "Invoice type",
-  "header.erp_reference": "ERP reference",
-};
 
 const s3 = new S3Client({});
 
@@ -33,6 +25,11 @@ export async function processInvoiceJob(job: InvoiceJob): Promise<void> {
   try {
     await publishInvoiceFile(job, bucket, objectKey);
   } catch (error) {
+    if (error instanceof RetryLater) {
+      console.error("invoice-engine waiting", objectKey, error.message);
+      await storeFileException(job, error.message);
+      throw error;
+    }
     if (isTransient(error)) throw error;
     const message = messageOf(error);
     console.error("invoice-engine rejected", objectKey, message);
@@ -47,14 +44,32 @@ async function publishInvoiceFile(job: InvoiceJob, bucket: string, objectKey: st
   const csv = await readInvoice(bucket, objectKey);
   if (csv === undefined) return;
 
-  const mappings = await mappingsForInvoice(erpCode);
-  const branch = job.branchId
-    ? await prisma.branch.findFirst({
-        where: { id: BigInt(job.branchId), legal_entity_id: BigInt(entity.id) },
-        select: { code: true },
-      })
-    : null;
-  const invoices = invoicesFromCsv(csv, mappings, branch?.code);
+  const header = parseCsv(csv)[0];
+  if (!header) throw new Error("invoice file has no header");
+  const [sales, zeroRated, adjustments] = await Promise.all([
+    fieldMap(erpCode, "01"),
+    fieldMap(erpCode, "07"),
+    fieldMap(erpCode, "04"),
+  ]);
+  if (!job.branchId) throw new Error("invoice file is not in a branch folder");
+  const branch = await prisma.branch.findFirst({
+    where: { id: BigInt(job.branchId), legal_entity_id: BigInt(entity.id) },
+    select: { code: true },
+  });
+  if (!branch) throw new Error(`branch ${job.branchId} is not in this legal entity`);
+
+  if (isAdjustmentHeader(header, adjustments)) {
+    let rejected = false;
+    for (const note of adjustmentsFromCsv(csv, adjustments)) {
+      const outcome = await submitMappedAdjustment(entity, objectKey, job.branchId, note);
+      if (outcome === "rejected") rejected = true;
+    }
+    await clearFileException(entity.id, objectKey, job.branchId);
+    await moveInvoice(bucket, objectKey, rejected ? "rejected" : "processed");
+    return;
+  }
+
+  const invoices = invoicesFromCsv(csv, invoiceMapping(csv, sales, zeroRated), branch.code);
   let rejected = false;
   for (const invoice of invoices) {
     const outcome = await submitMappedInvoice(entity, objectKey, job.branchId, invoice);
@@ -66,17 +81,12 @@ async function publishInvoiceFile(job: InvoiceJob, bucket: string, objectKey: st
 
 const pollFile = /\/inbound\/poll-([a-z0-9_]+)-[^/]+\.csv$/;
 
-async function mappingsForInvoice(
-  erpCode: string,
-): Promise<{ source_column: string; target_field: string }[]> {
+async function fieldMap(erpCode: string, schedule: "01" | "04" | "07"): Promise<Record<string, string>> {
   const stored = await prisma.erpFieldMapping.findUnique({
-    where: { erp_code_schedule: { erp_code: erpCode, schedule: "01" } },
+    where: { erp_code_schedule: { erp_code: erpCode, schedule } },
   });
-  if (!stored) throw new Error(`field mapping has no schedule 01 for ${erpCode}`);
-  return Object.entries(readErpFieldMap(stored.mapping)).flatMap(([erpField, ramisField]) => {
-    const target = pathTargets[ramisField];
-    return target ? [{ source_column: erpField, target_field: target }] : [];
-  });
+  if (!stored) throw new Error(`field mapping has no schedule ${schedule} for ${erpCode}`);
+  return readErpFieldMap(stored.mapping);
 }
 
 async function erpCodeForInvoice(organizationId: number, objectKey: string): Promise<string> {

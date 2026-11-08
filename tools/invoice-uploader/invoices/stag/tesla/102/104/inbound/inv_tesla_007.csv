@@ -1,0 +1,2 @@
+header.erp_reference,header.invoice_date,header.supply_date,purchaser.tin,purchaser.name,currency_summary.total_value_excluding_vat,currency_summary.total_vat_amount,header.invoice_type
+inv_tesla_007,2026-11-08,2026-11-08,156789012,Harbour Exports,2400000.00,0.00,ZERO_RATED
