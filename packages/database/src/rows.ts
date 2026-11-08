@@ -77,6 +77,7 @@ export function legalEntityRow(row: LegalEntity): LegalEntityRow {
     name: row.name,
     tin: row.tin,
     vat_number: row.vat_number,
+    ramis_enabled: row.ramis_enabled,
     created_at: stamp(row.created_at),
   };
 }

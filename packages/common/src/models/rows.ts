@@ -22,6 +22,7 @@ export type LegalEntityRow = {
   name: string;
   tin: string;
   vat_number: string | null;
+  ramis_enabled: boolean;
   created_at: string;
 };
 
@@ -223,7 +224,7 @@ export type TableName = keyof Tables;
 
 export const tableColumns = {
   organizations: ["id", "name", "slug", "monthly_allowance", "polling_enabled", "created_at"],
-  legal_entities: ["id", "organization_id", "name", "tin", "vat_number", "created_at"],
+  legal_entities: ["id", "organization_id", "name", "tin", "vat_number", "ramis_enabled", "created_at"],
   branches: ["id", "legal_entity_id", "code", "name", "created_at"],
   memberships: ["id", "user_id", "organization_id", "role", "created_at"],
   erp_connections: [

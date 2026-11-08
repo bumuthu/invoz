@@ -51,6 +51,7 @@ export function toLegalEntity(row: LegalEntityRow): LegalEntity {
     name: row.name,
     tin: row.tin,
     vatNumber: row.vat_number,
+    ramisEnabled: row.ramis_enabled,
     createdAt: row.created_at,
   };
 }

@@ -5,7 +5,9 @@
     "typecheck": "tsc --noEmit",
     "migrate": "node --env-file=.env --import tsx scripts/migrate.ts",
     "seed": "node --env-file=.env --import tsx scripts/seed.ts",
-    "onboard": "node --env-file=.env --import tsx scripts/onboard.ts"
+    "onboard": "node --env-file=.env --import tsx scripts/onboard.ts",
+    "enable:sftp": "node --env-file=.env --import tsx scripts/enable-sftp.ts",
+    "enable:poll": "node --env-file=.env --import tsx scripts/enable-poll.ts"
   },
   "dependencies": {
     "@invoz/common": "*",

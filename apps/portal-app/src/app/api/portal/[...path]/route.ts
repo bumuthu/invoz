@@ -5,23 +5,24 @@ import { portalRoles } from "@invoz/common";
 import {
   approveInbound,
   correctAndResubmit,
+  createBranch,
+  createLegalEntity,
   inviteMember,
   requestErpChange,
   requestPoll,
   requestSftp,
+  setRamisEnabled,
   type DocumentCorrection,
 } from "@/lib/actions";
 import {
   loadAudit,
-  loadBranches,
-  loadErp,
   loadExceptions,
   loadIngestion,
   loadInvoice,
-  loadMapping,
   loadOverview,
   loadScheduleDocuments,
   loadSchedulePurchases,
+  loadSetup,
   loadShell,
   loadStatement,
   loadSubscription,
@@ -75,9 +76,7 @@ async function readPortal(path: string[]) {
   if (key === "overview") return loadOverview();
   if (key === "users") return loadUsers();
   if (key === "exceptions") return loadExceptions();
-  if (key === "erp") return loadErp();
-  if (key === "mapping") return loadMapping();
-  if (key === "branches") return loadBranches();
+  if (key === "setup") return loadSetup();
   if (key === "audit") return loadAudit();
   if (key === "statement") return loadStatement();
   if (key === "ingestion") return loadIngestion();
@@ -111,12 +110,11 @@ async function writePortal(key: string, body: unknown) {
     if (typeof record.organizationId !== "string") {
       return { ok: false as const, error: "Organization not found." };
     }
-    const legalEntityId = record.legalEntityId === null || typeof record.legalEntityId === "string" ? record.legalEntityId : undefined;
     if ((record.action === "enable" || record.action === "disable") && typeof record.connectionId === "string") {
       return requestErpChange(record.organizationId, record.connectionId, record.action);
     }
-    if (record.action === "sftp" && typeof record.erpCode === "string" && legalEntityId !== undefined) {
-      return requestSftp(record.organizationId, record.erpCode, legalEntityId);
+    if (record.action === "sftp" && typeof record.erpCode === "string") {
+      return requestSftp(record.organizationId, record.erpCode);
     }
     if (
       record.action === "poll" &&
@@ -125,8 +123,7 @@ async function writePortal(key: string, body: unknown) {
       typeof record.endpointUrl === "string" &&
       typeof record.apiKey === "string" &&
       (record.lastInvoiceId === null || typeof record.lastInvoiceId === "string") &&
-      (record.connectionId === null || typeof record.connectionId === "string") &&
-      legalEntityId !== undefined
+      (record.connectionId === null || typeof record.connectionId === "string")
     ) {
       return requestPoll({
         organizationId: record.organizationId,
@@ -135,11 +132,52 @@ async function writePortal(key: string, body: unknown) {
         endpointUrl: record.endpointUrl,
         apiKey: record.apiKey,
         lastInvoiceId: record.lastInvoiceId,
-        legalEntityId,
         connectionId: record.connectionId,
       });
     }
     return { ok: false as const, error: "Integration request was not understood." };
+  }
+  if (key === "ramis") {
+    if (
+      typeof record.organizationId !== "string" ||
+      typeof record.legalEntityId !== "string" ||
+      typeof record.enabled !== "boolean"
+    ) {
+      return { ok: false as const, error: "Legal entity not found." };
+    }
+    return setRamisEnabled(record.organizationId, record.legalEntityId, record.enabled);
+  }
+  if (key === "organization/entities") {
+    if (
+      typeof record.organizationId !== "string" ||
+      typeof record.name !== "string" ||
+      typeof record.tin !== "string" ||
+      (record.vatNumber !== null && typeof record.vatNumber !== "string")
+    ) {
+      return { ok: false as const, error: "Enter the legal entity." };
+    }
+    return createLegalEntity({
+      organizationId: record.organizationId,
+      name: record.name,
+      tin: record.tin,
+      vatNumber: record.vatNumber,
+    });
+  }
+  if (key === "organization/branches") {
+    if (
+      typeof record.organizationId !== "string" ||
+      typeof record.legalEntityId !== "string" ||
+      typeof record.code !== "string" ||
+      typeof record.name !== "string"
+    ) {
+      return { ok: false as const, error: "Enter the branch." };
+    }
+    return createBranch({
+      organizationId: record.organizationId,
+      legalEntityId: record.legalEntityId,
+      code: record.code,
+      name: record.name,
+    });
   }
   if (key === "members") {
     if (typeof record.organizationId !== "string" || typeof record.email !== "string" || !isRole(record.role)) {

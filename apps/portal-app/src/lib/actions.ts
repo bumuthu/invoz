@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { portalRoles, type PortalRole } from "@invoz/common";
+import { isBranchCode, isTin, portalRoles, type PortalRole } from "@invoz/common";
 import { prisma } from "@invoz/database";
 import { enqueueResubmit } from "@/lib/queue";
 import { permissions, resolveAccess } from "@/lib/access";
@@ -70,14 +70,8 @@ export async function approveInbound(organizationId: string, ids: string[]): Pro
   return { ok: true, message: `Approved ${rows.length} purchase${rows.length === 1 ? "" : "s"}.` };
 }
 
-export async function requestSftp(
-  organizationId: string,
-  erpCode: string,
-  legalEntityId: string | null,
-): Promise<ActionResult> {
+export async function requestSftp(organizationId: string, erpCode: string): Promise<ActionResult> {
   if (!isErpCode(erpCode)) return { ok: false, error: "That ERP is not supported." };
-  const entityId = optionalEntity(legalEntityId);
-  if (entityId === "invalid") return { ok: false, error: "Legal entity not found." };
   const { access, error } = await authorize(organizationId);
   if (!access) return { ok: false, error };
   if (!permissions(access.role).canMap) {
@@ -85,9 +79,6 @@ export async function requestSftp(
   }
 
   const organization = BigInt(organizationId);
-  if (!(await entityInOrganization(organization, entityId))) {
-    return { ok: false, error: "Legal entity not found." };
-  }
   const existing = await prisma.erpConnection.findFirst({
     where: { organization_id: organization, ingestion_mode: "sftp" },
     select: { id: true },
@@ -99,7 +90,7 @@ export async function requestSftp(
       const connection = await tx.erpConnection.create({
         data: {
           organization_id: organization,
-          legal_entity_id: entityId,
+          legal_entity_id: null,
           erp_code: erpCode,
           ingestion_mode: "sftp",
           status: "offline",
@@ -116,7 +107,6 @@ export async function requestSftp(
       await tx.auditLog.create({
         data: {
           organization_id: organization,
-          legal_entity_id: entityId,
           event: "erp.change_requested",
           detail: { action: "enable", ingestionMode: "sftp", erp: erpCode },
         },
@@ -138,12 +128,9 @@ export async function requestPoll(input: {
   endpointUrl: string;
   apiKey: string;
   lastInvoiceId: string | null;
-  legalEntityId: string | null;
   connectionId: string | null;
 }): Promise<ActionResult> {
   if (!canPollErp(input.erpCode)) return { ok: false, error: "Polling is available for SAP and IFS." };
-  const entityId = optionalEntity(input.legalEntityId);
-  if (entityId === "invalid") return { ok: false, error: "Legal entity not found." };
   const label = input.label.trim();
   if (!label || label.length > 80) return { ok: false, error: "Enter a name for this API configuration." };
   const endpoint = endpointUrl(input.endpointUrl);
@@ -159,12 +146,16 @@ export async function requestPoll(input: {
   }
 
   const organization = BigInt(input.organizationId);
-  if (!(await entityInOrganization(organization, entityId))) {
-    return { ok: false, error: "Legal entity not found." };
+  if (input.connectionId === null) {
+    const existing = await prisma.erpConnection.findFirst({
+      where: { organization_id: organization, erp_code: input.erpCode, ingestion_mode: "poll" },
+      select: { id: true },
+    });
+    if (existing) return { ok: false, error: "This ERP already has a polling request." };
   }
 
   const details = {
-    legal_entity_id: entityId,
+    legal_entity_id: null,
     label,
     endpoint_url: endpoint,
     api_username: null,
@@ -201,7 +192,6 @@ export async function requestPoll(input: {
       prisma.auditLog.create({
         data: {
           organization_id: organization,
-          legal_entity_id: entityId,
           event: "erp.change_requested",
           detail: { action: "enable", ingestionMode: "poll", erp: input.erpCode, label },
         },
@@ -231,7 +221,6 @@ export async function requestPoll(input: {
     await tx.auditLog.create({
       data: {
         organization_id: organization,
-        legal_entity_id: entityId,
         event: "erp.change_requested",
         detail: { action: "enable", ingestionMode: "poll", erp: input.erpCode, label },
       },
@@ -292,6 +281,133 @@ export async function requestErpChange(
   };
 }
 
+export async function setRamisEnabled(
+  organizationId: string,
+  legalEntityId: string,
+  enabled: boolean,
+): Promise<ActionResult> {
+  if (!/^\d+$/.test(legalEntityId)) return { ok: false, error: "Legal entity not found." };
+  const { access, error } = await authorize(organizationId);
+  if (!access) return { ok: false, error };
+  if (!permissions(access.role).canMap) {
+    return { ok: false, error: "Your role cannot change a RAMIS connection." };
+  }
+  const organization = BigInt(organizationId);
+  const entity = await prisma.legalEntity.findFirst({
+    where: { id: BigInt(legalEntityId), organization_id: organization },
+    select: { id: true },
+  });
+  if (!entity) return { ok: false, error: "Legal entity not found." };
+  await prisma.$transaction([
+    prisma.legalEntity.update({ where: { id: entity.id }, data: { ramis_enabled: enabled } }),
+    prisma.auditLog.create({
+      data: {
+        organization_id: organization,
+        legal_entity_id: entity.id,
+        event: enabled ? "ramis.enabled" : "ramis.disabled",
+        detail: {},
+      },
+    }),
+  ]);
+  return { ok: true, message: enabled ? "Legal entity enabled for RAMIS." : "Legal entity disabled for RAMIS." };
+}
+
+export async function createLegalEntity(input: {
+  organizationId: string;
+  name: string;
+  tin: string;
+  vatNumber: string | null;
+}): Promise<ActionResult> {
+  const name = input.name.trim();
+  if (!name || name.length > 120) return { ok: false, error: "Enter the legal entity name." };
+  const tin = input.tin.trim();
+  if (!isTin(tin)) return { ok: false, error: "TIN must be 9 digits." };
+  const vatNumber = optionalVat(input.vatNumber);
+  if (vatNumber === "invalid") return { ok: false, error: "VAT number is too long." };
+  const { access, error } = await authorize(input.organizationId);
+  if (!access) return { ok: false, error };
+  if (!permissions(access.role).canMap) {
+    return { ok: false, error: "Your role cannot change the organization." };
+  }
+  const organization = BigInt(input.organizationId);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const entity = await tx.legalEntity.create({
+        data: {
+          organization_id: organization,
+          name,
+          tin,
+          vat_number: vatNumber,
+          ramis_enabled: false,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organization_id: organization,
+          legal_entity_id: entity.id,
+          event: "organization.entity_created",
+          detail: { name, tin },
+        },
+      });
+    });
+  } catch (caught) {
+    if (isUniqueViolation(caught)) return { ok: false, error: "That TIN is already used in this organization." };
+    throw caught;
+  }
+  return { ok: true, message: "Legal entity added. It stays disabled for RAMIS until you enable it." };
+}
+
+export async function createBranch(input: {
+  organizationId: string;
+  legalEntityId: string;
+  code: string;
+  name: string;
+}): Promise<ActionResult> {
+  if (!/^\d+$/.test(input.legalEntityId)) return { ok: false, error: "Legal entity not found." };
+  const code = input.code.trim().toUpperCase();
+  if (!isBranchCode(code)) return { ok: false, error: "Branch code must be 1 to 15 letters or digits." };
+  const name = input.name.trim();
+  if (!name || name.length > 120) return { ok: false, error: "Enter the branch name." };
+  const { access, error } = await authorize(input.organizationId);
+  if (!access) return { ok: false, error };
+  if (!permissions(access.role).canMap) {
+    return { ok: false, error: "Your role cannot change the organization." };
+  }
+  const organization = BigInt(input.organizationId);
+  const entity = await prisma.legalEntity.findFirst({
+    where: { id: BigInt(input.legalEntityId), organization_id: organization },
+    select: { id: true },
+  });
+  if (!entity) return { ok: false, error: "Legal entity not found." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      const branch = await tx.branch.create({
+        data: { legal_entity_id: entity.id, code, name },
+      });
+      await tx.auditLog.create({
+        data: {
+          organization_id: organization,
+          legal_entity_id: entity.id,
+          event: "organization.branch_created",
+          detail: { code, name, branchId: String(branch.id) },
+        },
+      });
+    });
+  } catch (caught) {
+    if (isUniqueViolation(caught)) return { ok: false, error: "That branch code is already used on this legal entity." };
+    throw caught;
+  }
+  return { ok: true, message: "Branch added." };
+}
+
+function optionalVat(value: string | null): string | null | "invalid" {
+  if (value === null) return null;
+  const vat = value.trim();
+  if (!vat) return null;
+  if (vat.length > 40) return "invalid";
+  return vat;
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }
@@ -301,21 +417,6 @@ function optionalInvoiceId(value: string | null): string | null | "invalid" {
   const invoiceId = value.trim();
   if (invoiceId.length > 40 || /[\s'"]/.test(invoiceId)) return "invalid";
   return invoiceId;
-}
-
-function optionalEntity(value: string | null): bigint | null | "invalid" {
-  if (value === null || value === "") return null;
-  if (!/^\d+$/.test(value)) return "invalid";
-  return BigInt(value);
-}
-
-async function entityInOrganization(organizationId: bigint, entityId: bigint | null): Promise<boolean> {
-  if (!entityId) return true;
-  const entity = await prisma.legalEntity.findFirst({
-    where: { id: entityId, organization_id: organizationId },
-    select: { id: true },
-  });
-  return entity !== null;
 }
 
 function endpointUrl(value: string): string | null {

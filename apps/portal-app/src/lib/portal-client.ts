@@ -1,14 +1,12 @@
 import type {
   loadAudit,
-  loadBranches,
-  loadErp,
   loadExceptions,
   loadIngestion,
   loadInvoice,
-  loadMapping,
   loadOverview,
   loadScheduleDocuments,
   loadSchedulePurchases,
+  loadSetup,
   loadShell,
   loadStatement,
   loadSubscription,
@@ -96,16 +94,8 @@ export function fetchExceptions(search: string) {
   return getJson<Result<typeof loadExceptions>>("exceptions", search);
 }
 
-export function fetchErp(search: string) {
-  return getJson<Result<typeof loadErp>>("erp", search);
-}
-
-export function fetchMapping(search: string) {
-  return getJson<Result<typeof loadMapping>>("mapping", search);
-}
-
-export function fetchBranches(search: string) {
-  return getJson<Result<typeof loadBranches>>("branches", search);
+export function fetchSetup(search: string) {
+  return getJson<Result<typeof loadSetup>>("setup", search);
 }
 
 export function fetchAudit(search: string) {
@@ -143,8 +133,8 @@ export function approveInbound(organizationId: string, ids: string[]) {
   return postJson<ActionResult>("purchases/approve", { organizationId, ids });
 }
 
-export function requestSftp(organizationId: string, erpCode: string, legalEntityId: string | null) {
-  return postJson<ActionResult>("erp", { organizationId, action: "sftp", erpCode, legalEntityId });
+export function requestSftp(organizationId: string, erpCode: string) {
+  return postJson<ActionResult>("erp", { organizationId, action: "sftp", erpCode });
 }
 
 export function requestPoll(input: {
@@ -154,7 +144,6 @@ export function requestPoll(input: {
   endpointUrl: string;
   apiKey: string;
   lastInvoiceId: string | null;
-  legalEntityId: string | null;
   connectionId: string | null;
 }) {
   return postJson<ActionResult>("erp", { ...input, action: "poll" });
@@ -162,6 +151,28 @@ export function requestPoll(input: {
 
 export function requestErpChange(organizationId: string, connectionId: string, action: "enable" | "disable") {
   return postJson<ActionResult>("erp", { organizationId, connectionId, action });
+}
+
+export function setRamisEnabled(organizationId: string, legalEntityId: string, enabled: boolean) {
+  return postJson<ActionResult>("ramis", { organizationId, legalEntityId, enabled });
+}
+
+export function createLegalEntity(input: {
+  organizationId: string;
+  name: string;
+  tin: string;
+  vatNumber: string | null;
+}) {
+  return postJson<ActionResult>("organization/entities", input);
+}
+
+export function createBranch(input: {
+  organizationId: string;
+  legalEntityId: string;
+  code: string;
+  name: string;
+}) {
+  return postJson<ActionResult>("organization/branches", input);
 }
 
 export function inviteMember(organizationId: string, email: string, role: PortalRole) {

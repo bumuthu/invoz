@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
-import { formatGazetteSerial, portalRoleLabel, portalRoles, readErpFieldMap, type PortalRole } from "@invoz/common";
+import { formatGazetteSerial, portalRoleLabel, portalRoles, type PortalRole } from "@invoz/common";
 import {
   branchRow,
   invoiceUsageRow,
@@ -34,7 +34,6 @@ import type {
   ErpConnectionView,
   Invoice,
   PipelineCounts,
-  ScheduleMapRow,
   ScheduleRow,
 } from "@/lib/types";
 
@@ -675,15 +674,11 @@ export const loadUsers = cache(async () => {
   };
 });
 
-export const loadErp = cache(async () => {
+export const loadSetup = cache(async () => {
   const scope = await loadScope();
-  const entityFilter =
-    scope.appliedFilters.entityId === "all"
-      ? {}
-      : { OR: [{ legal_entity_id: null }, { legal_entity_id: { in: scope.entityIds } }] };
-  const [records, requests] = await Promise.all([
+  const [records, requests, entities] = await Promise.all([
     prisma.erpConnection.findMany({
-      where: { organization_id: scope.organizationId, ...entityFilter },
+      where: { organization_id: scope.organizationId },
       orderBy: [{ connected_at: "asc" }],
       select: { ...connectionSelect, api_secret: true },
     }),
@@ -691,103 +686,61 @@ export const loadErp = cache(async () => {
       where: { organization_id: scope.organizationId, status: "pending" },
       select: { erp_connection_id: true, action: true },
     }),
+    prisma.legalEntity.findMany({
+      where: { organization_id: scope.organizationId },
+      orderBy: { name: "asc" },
+      include: { branches: { orderBy: { code: "asc" } } },
+    }),
   ]);
   const pending = new Map(
     requests.flatMap((row) =>
       row.action === "enable" || row.action === "disable" ? [[String(row.erp_connection_id), row.action] as const] : [],
     ),
   );
-  const entityName = new Map(scope.entities.map((entity) => [entity.id, entity.name]));
+  const counters =
+    entities.length === 0
+      ? []
+      : (
+          await prisma.serialCounter.findMany({
+            where: { legal_entity_id: { in: entities.map((entity) => entity.id) } },
+          })
+        ).map(serialCounterRow);
+  const preferredGazette = gazettePeriod(scope.appliedFilters.period);
+  const legalEntities = entities.map((entity) => ({
+    id: String(entity.id),
+    name: entity.name,
+    tin: entity.tin,
+    vatNumber: entity.vat_number,
+    ramisEnabled: entity.ramis_enabled,
+  }));
+  const branches: BranchView[] = entities.flatMap((entity) =>
+    entity.branches.map((branch) => {
+      const branchId = Number(branch.id);
+      const counter = counters
+        .filter((item) => item.branch_id === branchId)
+        .sort((left, right) => {
+          if (preferredGazette && left.period === preferredGazette) return -1;
+          if (preferredGazette && right.period === preferredGazette) return 1;
+          return periodRank(right.period) - periodRank(left.period);
+        })[0];
+      return {
+        id: branchKey(Number(entity.id), branch.code),
+        code: branch.code,
+        name: branch.name,
+        entityId: String(entity.id),
+        entity: entity.name,
+        nextSerial: counter ? formatGazetteSerial(counter.period, branch.code, counter.last_value + 1) : "—",
+      };
+    }),
+  );
   return {
     erpCatalog: erpCatalog.map((erp) => ({ code: erp.code, name: erp.name })),
-    erpConnections: records.map((row) => connectionView(row, entityName, pending.get(String(row.id)) ?? null)),
-    entities: scope.entities.map((entity) => ({
-      id: String(entity.id),
-      name: entity.name,
-      tin: entity.tin,
-    })),
+    erpConnections: records.map((row) => connectionView(row, new Map(), pending.get(String(row.id)) ?? null)),
+    legalEntities,
+    branches,
     organization: organizationOf(scope),
     pollingEnabled: scope.access.organization.polling_enabled,
-    filters: scope.appliedFilters,
     canMap: scope.flags.canMap,
-  };
-});
-
-function scheduleCode(value: string): "01" | "04" | "07" | null {
-  if (value === "01" || value === "04" || value === "07") return value;
-  return null;
-}
-
-export const loadMapping = cache(async () => {
-  const scope = await loadScope();
-  const selectedId = scope.appliedFilters.entityId === "all" ? null : scope.entityIds[0];
-  const connections = selectedId
-    ? await prisma.erpConnection.findMany({
-        where: {
-          organization_id: scope.organizationId,
-          OR: [{ legal_entity_id: null }, { legal_entity_id: selectedId }],
-        },
-        orderBy: { connected_at: "asc" },
-        select: connectionSelect,
-      })
-    : [];
-  const entityName = new Map(scope.entities.map((entity) => [entity.id, entity.name]));
-  const codes = [...new Set(connections.map((row) => row.erp_code))];
-  const mapRecords = codes.length
-    ? await prisma.erpFieldMapping.findMany({
-        where: { erp_code: { in: codes }, schedule: { in: ["01", "04", "07"] } },
-        orderBy: [{ erp_code: "asc" }, { schedule: "asc" }],
-        select: { erp_code: true, schedule: true, mapping: true },
-      })
-    : [];
-  const scheduleMaps = mapRecords.flatMap((row): ScheduleMapRow[] => {
-    const schedule = scheduleCode(row.schedule);
-    if (!schedule) return [];
-    return Object.entries(readErpFieldMap(row.mapping))
-      .map(([erpField, ramisField]) => ({
-        erpCode: row.erp_code,
-        schedule,
-        erpField,
-        ramisField,
-      }))
-      .sort((left, right) => left.ramisField.localeCompare(right.ramisField));
-  });
-  return {
-    erpConnections: connections.map((row) => connectionView(row, entityName, null)),
-    scheduleMaps,
-    filters: scope.appliedFilters,
-  };
-});
-
-export const loadBranches = cache(async () => {
-  const scope = await loadScope();
-  const counters = (
-    await prisma.serialCounter.findMany({ where: { legal_entity_id: { in: scope.entityIds } } })
-  ).map(serialCounterRow);
-  const entityName = new Map(scope.entities.map((entity) => [entity.id, entity.name]));
-  const preferredGazette = gazettePeriod(scope.appliedFilters.period);
-  const branches: BranchView[] = scope.branches.map((branch) => {
-    const counter = counters
-      .filter((item) => item.branch_id === branch.id)
-      .sort((left, right) => {
-        if (preferredGazette && left.period === preferredGazette) return -1;
-        if (preferredGazette && right.period === preferredGazette) return 1;
-        return periodRank(right.period) - periodRank(left.period);
-      })[0];
-    return {
-      id: branchKey(branch.legal_entity_id, branch.code),
-      code: branch.code,
-      name: branch.name,
-      entityId: String(branch.legal_entity_id),
-      entity: entityName.get(branch.legal_entity_id) ?? String(branch.legal_entity_id),
-      nextSerial: counter ? formatGazetteSerial(counter.period, branch.code, counter.last_value + 1) : "—",
-    };
-  });
-  return {
-    branches:
-      scope.appliedFilters.branch === "all"
-        ? branches
-        : branches.filter((branch) => branch.id === scope.appliedFilters.branch),
   };
 });
 

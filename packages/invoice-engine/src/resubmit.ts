@@ -13,11 +13,56 @@ import {
 } from "@invoz/common/ramis";
 
 export async function processResubmit(job: ResubmitJob): Promise<void> {
+  if (!(await canPublish(job))) return;
   if (job.document === "invoice") {
     await resubmitInvoice(job);
     return;
   }
   await resubmitAdjustment(job);
+}
+
+async function canPublish(job: ResubmitJob): Promise<boolean> {
+  const connection = await prisma.erpConnection.findFirst({
+    where: { organization_id: BigInt(job.organizationId), status: "live" },
+    select: { id: true },
+  });
+  if (!connection) {
+    const connections = await prisma.erpConnection.findMany({
+      where: { organization_id: BigInt(job.organizationId) },
+      select: { erp_code: true, ingestion_mode: true, status: true },
+    });
+    console.log(
+      "invoice-engine skipped",
+      JSON.stringify({
+        reason: "erp connection is not live",
+        organizationId: job.organizationId,
+        legalEntityId: job.legalEntityId,
+        document: job.document,
+        documentId: job.documentId,
+        connections,
+      }),
+    );
+    return false;
+  }
+  const entity = await prisma.legalEntity.findFirst({
+    where: { id: BigInt(job.legalEntityId), organization_id: BigInt(job.organizationId) },
+    select: { name: true, tin: true, ramis_enabled: true },
+  });
+  if (!entity) return true;
+  if (entity.ramis_enabled) return true;
+  console.log(
+    "invoice-engine skipped",
+    JSON.stringify({
+      reason: "ramis connection is disabled",
+      organizationId: job.organizationId,
+      legalEntityId: job.legalEntityId,
+      document: job.document,
+      documentId: job.documentId,
+      name: entity?.name ?? null,
+      tin: entity?.tin ?? null,
+    }),
+  );
+  return false;
 }
 
 async function resubmitInvoice(job: ResubmitJob): Promise<void> {

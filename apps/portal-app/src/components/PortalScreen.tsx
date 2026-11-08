@@ -9,9 +9,7 @@ import IngestionPage from "@/app/(portal)/ingestion/screen";
 import InvoicePage from "@/app/(portal)/invoices/[id]/screen";
 import OverviewPage from "@/app/(portal)/overview-screen";
 import SchedulePage from "@/app/(portal)/schedules/[schedule]/screen";
-import BranchesPage from "@/app/(portal)/setup/branches/screen";
-import ErpPage from "@/app/(portal)/setup/erp/screen";
-import MappingPage from "@/app/(portal)/setup/mapping/screen";
+import SetupPage from "@/app/(portal)/setup/screen";
 import SubscriptionPage from "@/app/(portal)/subscription/screen";
 import UsersPage from "@/app/(portal)/users/screen";
 import { replacePortal, usePortalPath } from "@/lib/portal-nav";
@@ -22,9 +20,9 @@ const pages: Record<string, () => ReactNode> = {
   "/audit": AuditPage,
   "/audit/statement": StatementPage,
   "/ingestion": IngestionPage,
-  "/setup/erp": ErpPage,
-  "/setup/mapping": MappingPage,
-  "/setup/branches": BranchesPage,
+  "/setup/erp": SetupPage,
+  "/setup/ramis": SetupPage,
+  "/setup/organization": SetupPage,
   "/users": UsersPage,
   "/subscription": SubscriptionPage,
 };
@@ -32,7 +30,15 @@ const pages: Record<string, () => ReactNode> = {
 export default function PortalScreen() {
   const { pathname, search } = usePortalPath();
   const canonical =
-    pathname === "/invoices" ? "/schedules/01" : pathname === "/schedule-02" ? "/schedules/02" : pathname;
+    pathname === "/invoices"
+      ? "/schedules/01"
+      : pathname === "/schedule-02"
+        ? "/schedules/02"
+        : pathname === "/setup" || pathname === "/setup/mapping"
+          ? "/setup/erp"
+          : pathname === "/setup/branches"
+            ? "/setup/organization"
+            : pathname;
 
   useEffect(() => {
     if (canonical !== pathname) replacePortal(search ? `${canonical}?${search}` : canonical);

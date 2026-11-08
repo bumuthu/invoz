@@ -42,6 +42,7 @@ export type LegalEntity = {
   name: string;
   tin: string;
   vatNumber: string | null;
+  ramisEnabled: boolean;
   createdAt: string;
 };
 

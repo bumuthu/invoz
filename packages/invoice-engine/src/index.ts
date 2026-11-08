@@ -27,11 +27,14 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   if (job.source !== "s3" || !job.bucket || !job.objectKey) {
     throw new Error("s3 jobs require bucket and objectKey");
   }
-  const entity = await legalEntity(job.legalEntityId, job.organizationId);
+  const erpCode = await erpCodeForInvoice(job.organizationId, job.objectKey, job.legalEntityId);
+  if (!erpCode) return;
+  const entity = await legalEntity(job.legalEntityId, job.organizationId, job.objectKey);
+  if (!entity) return;
   const csv = await readInvoice(job.bucket, job.objectKey);
   if (csv === undefined) return;
 
-  const mappings = await mappingsForInvoice(entity, job.objectKey);
+  const mappings = await mappingsForInvoice(erpCode);
   const branch = job.branchId
     ? await prisma.branch.findFirst({
         where: { id: BigInt(job.branchId), legal_entity_id: BigInt(entity.id) },
@@ -50,10 +53,8 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
 const pollFile = /\/inbound\/poll-([a-z0-9_]+)-[^/]+\.csv$/;
 
 async function mappingsForInvoice(
-  entity: Entity,
-  objectKey: string,
+  erpCode: string,
 ): Promise<{ source_column: string; target_field: string }[]> {
-  const erpCode = await erpCodeForInvoice(entity.organization_id, objectKey);
   const stored = await prisma.erpFieldMapping.findUnique({
     where: { erp_code_schedule: { erp_code: erpCode, schedule: "01" } },
   });
@@ -64,7 +65,11 @@ async function mappingsForInvoice(
   });
 }
 
-async function erpCodeForInvoice(organizationId: number, objectKey: string): Promise<string> {
+async function erpCodeForInvoice(
+  organizationId: number,
+  objectKey: string,
+  legalEntityId: number,
+): Promise<string | null> {
   const polled = pollFile.exec(objectKey);
   if (polled) {
     const code = polled[1];
@@ -74,30 +79,68 @@ async function erpCodeForInvoice(organizationId: number, objectKey: string): Pro
         erp_code: code,
         ingestion_mode: "poll",
       },
-      select: { id: true },
+      select: { erp_code: true, ingestion_mode: true, status: true },
     });
-    if (!connection) throw new Error(`organization has no ${code} poll integration`);
-    return code;
+    if (connection?.status === "live") return code;
+    skipPublish({
+      reason: "erp connection is not live",
+      organizationId,
+      legalEntityId,
+      objectKey,
+      erpCode: code,
+      ingestionMode: "poll",
+      status: connection?.status ?? null,
+    });
+    return null;
   }
   const sftp = await prisma.erpConnection.findMany({
     where: { organization_id: BigInt(organizationId), ingestion_mode: "sftp" },
-    select: { erp_code: true },
+    select: { erp_code: true, ingestion_mode: true, status: true },
   });
-  if (sftp.length === 1) return sftp[0].erp_code;
-  if (sftp.length === 0) throw new Error("organization has no connected ERP");
-  throw new Error("organization has more than one SFTP integration");
+  if (sftp.length > 1) throw new Error("organization has more than one SFTP integration");
+  const connection = sftp[0];
+  if (connection?.status === "live") return connection.erp_code;
+  skipPublish({
+    reason: "erp connection is not live",
+    organizationId,
+    legalEntityId,
+    objectKey,
+    erpCode: connection?.erp_code ?? null,
+    ingestionMode: "sftp",
+    status: connection?.status ?? null,
+  });
+  return null;
 }
 
-async function legalEntity(legalEntityId: number, organizationId: number): Promise<Entity> {
+async function legalEntity(
+  legalEntityId: number,
+  organizationId: number,
+  objectKey: string,
+): Promise<Entity | null> {
   const row = await prisma.legalEntity.findUnique({
     where: { id: BigInt(legalEntityId) },
-    select: { id: true, organization_id: true, name: true, tin: true },
+    select: { id: true, organization_id: true, name: true, tin: true, ramis_enabled: true },
   });
   if (!row || Number(row.organization_id) !== organizationId) {
     throw new Error("legal entity is not in the organization on this job");
   }
+  if (!row.ramis_enabled) {
+    skipPublish({
+      reason: "ramis connection is disabled",
+      organizationId,
+      legalEntityId,
+      objectKey,
+      name: row.name,
+      tin: row.tin,
+    });
+    return null;
+  }
   if (!isTin(row.tin)) throw new Error("legal entity TIN must be 9 digits");
   return { id: Number(row.id), organization_id: Number(row.organization_id), name: row.name, tin: row.tin };
+}
+
+function skipPublish(detail: Record<string, unknown>): void {
+  console.log("invoice-engine skipped", JSON.stringify(detail));
 }
 
 async function submitMappedInvoice(

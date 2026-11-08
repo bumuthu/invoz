@@ -1,11 +1,9 @@
 "use client";
 
-import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Collapse from "@mui/material/Collapse";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
-import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
@@ -14,7 +12,7 @@ import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import ReportOutlinedIcon from "@mui/icons-material/ReportOutlined";
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
-import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
@@ -47,6 +45,7 @@ type NavItem = {
   label: string;
   icon: ReactNode;
   audit?: boolean;
+  match?: string;
   children?: { href: string; label: string }[];
 };
 
@@ -78,9 +77,12 @@ const sections: { label?: string; items: NavItem[] }[] = [
     label: "Administration",
     items: [
       { href: "/ingestion", label: "Ingestion", icon: <CloudSyncOutlinedIcon fontSize="small" /> },
-      { href: "/setup/erp", label: "ERP", icon: <FactCheckOutlinedIcon fontSize="small" /> },
-      { href: "/setup/mapping", label: "Field Mapping", icon: <AccountTreeOutlinedIcon fontSize="small" /> },
-      { href: "/setup/branches", label: "Branches", icon: <StorefrontOutlinedIcon fontSize="small" /> },
+      {
+        href: "/setup/erp",
+        match: "/setup",
+        label: "Setup",
+        icon: <SettingsOutlinedIcon fontSize="small" />,
+      },
       { href: "/users", label: "Users", icon: <GroupOutlinedIcon fontSize="small" /> },
       { href: "/subscription", label: "Subscription", icon: <CreditCardOutlinedIcon fontSize="small" /> },
     ],
@@ -164,10 +166,8 @@ function SidebarContent({
             ) : null}
             <List disablePadding>
               {section.items.filter((item) => !item.audit || canAudit).map((item) => {
-                const active =
-                  item.href === "/"
-                    ? current === "/"
-                    : current === item.href || current.startsWith(`${item.href}/`);
+                const prefix = item.match ?? item.href;
+                const active = item.href === "/" ? current === "/" : current === prefix || current.startsWith(`${prefix}/`);
                 const itemSx = (selected: boolean) => ({
                   mb: 0.5,
                   borderRadius: 2,

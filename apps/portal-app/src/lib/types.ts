@@ -82,11 +82,12 @@ export type ErpOption = {
   name: string;
 };
 
-export type ScheduleMapRow = {
-  erpCode: string;
-  schedule: "01" | "04" | "07";
-  erpField: string;
-  ramisField: string;
+export type LegalEntitySetup = {
+  id: string;
+  name: string;
+  tin: string;
+  vatNumber: string | null;
+  ramisEnabled: boolean;
 };
 
 export type ErpConnectionView = {
@@ -211,7 +212,6 @@ export type PortalData = {
   query: string;
   erpCatalog: ErpOption[];
   erpConnections: ErpConnectionView[];
-  scheduleMaps: ScheduleMapRow[];
   invoices: Invoice[];
   recent: Invoice[];
   rejected: Invoice[];

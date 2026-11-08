@@ -164,30 +164,6 @@ function FormSkeleton() {
   );
 }
 
-function ListSkeleton() {
-  return (
-    <>
-      <Header title={140} description={340} />
-      <Card>
-        <Stack spacing={0} sx={{ py: 1 }}>
-          {Array.from({ length: 4 }, (_, index) => (
-            <Stack key={index} direction="row" spacing={2} sx={{ px: 2.5, py: 2, alignItems: "center" }}>
-              <Bone width={48} height={48} />
-              <Box sx={{ flex: 1 }}>
-                <Bone width={160} height={16} />
-                <Box sx={{ mt: 0.75 }}>
-                  <Bone width={100} height={12} />
-                </Box>
-              </Box>
-              <Bone width={140} height={16} />
-            </Stack>
-          ))}
-        </Stack>
-      </Card>
-    </>
-  );
-}
-
 function SubscriptionSkeleton() {
   return (
     <>
@@ -266,8 +242,7 @@ export function skeletonKind(pathname: string) {
   if (pathname.startsWith("/audit/statement")) return "statement";
   if (pathname.startsWith("/audit")) return "audit";
   if (pathname.startsWith("/ingestion")) return "ingestion";
-  if (pathname.startsWith("/setup/mapping")) return "form";
-  if (pathname.startsWith("/setup/branches")) return "list";
+  if (pathname.startsWith("/setup")) return "form";
   if (pathname.startsWith("/subscription")) return "subscription";
   if (
     pathname.startsWith("/invoices") ||
@@ -291,7 +266,6 @@ export default function PageSkeleton({ route }: { route?: string }) {
       {kind === "audit" ? <AuditSkeleton /> : null}
       {kind === "ingestion" ? <IngestionSkeleton /> : null}
       {kind === "form" ? <FormSkeleton /> : null}
-      {kind === "list" ? <ListSkeleton /> : null}
       {kind === "subscription" ? <SubscriptionSkeleton /> : null}
       {kind === "table" ? <TableSkeleton /> : null}
       {kind === "overview" ? <OverviewSkeleton /> : null}
