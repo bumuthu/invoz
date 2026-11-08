@@ -11,9 +11,15 @@ import {
   type RamisAdjustment,
   type RamisInvoice,
 } from "@invoz/common/ramis";
+import { isTransient, messageOf } from "./failure";
 
 export async function processResubmit(job: ResubmitJob): Promise<void> {
-  if (!(await canPublish(job))) return;
+  const blocked = await publishBlockReason(job);
+  if (blocked) {
+    console.error("invoice-engine rejected", job.document, job.documentId, blocked);
+    await rejectQueuedDocument(job, blocked);
+    return;
+  }
   if (job.document === "invoice") {
     await resubmitInvoice(job);
     return;
@@ -21,48 +27,32 @@ export async function processResubmit(job: ResubmitJob): Promise<void> {
   await resubmitAdjustment(job);
 }
 
-async function canPublish(job: ResubmitJob): Promise<boolean> {
+async function publishBlockReason(job: ResubmitJob): Promise<string | null> {
   const connection = await prisma.erpConnection.findFirst({
     where: { organization_id: BigInt(job.organizationId), status: "live" },
     select: { id: true },
   });
-  if (!connection) {
-    const connections = await prisma.erpConnection.findMany({
-      where: { organization_id: BigInt(job.organizationId) },
-      select: { erp_code: true, ingestion_mode: true, status: true },
-    });
-    console.log(
-      "invoice-engine skipped",
-      JSON.stringify({
-        reason: "erp connection is not live",
-        organizationId: job.organizationId,
-        legalEntityId: job.legalEntityId,
-        document: job.document,
-        documentId: job.documentId,
-        connections,
-      }),
-    );
-    return false;
-  }
+  if (!connection) return "erp connection is not live";
   const entity = await prisma.legalEntity.findFirst({
     where: { id: BigInt(job.legalEntityId), organization_id: BigInt(job.organizationId) },
-    select: { name: true, tin: true, ramis_enabled: true },
+    select: { ramis_enabled: true },
   });
-  if (!entity) return true;
-  if (entity.ramis_enabled) return true;
-  console.log(
-    "invoice-engine skipped",
-    JSON.stringify({
-      reason: "ramis connection is disabled",
-      organizationId: job.organizationId,
-      legalEntityId: job.legalEntityId,
-      document: job.document,
-      documentId: job.documentId,
-      name: entity?.name ?? null,
-      tin: entity?.tin ?? null,
-    }),
-  );
-  return false;
+  if (!entity || entity.ramis_enabled) return null;
+  return "ramis connection is disabled";
+}
+
+async function rejectQueuedDocument(job: ResubmitJob, message: string): Promise<void> {
+  const data = { ramis_status: "rejected" as const, error_message: message };
+  const where = {
+    id: BigInt(job.documentId),
+    organization_id: BigInt(job.organizationId),
+    ramis_status: { not: "cleared" as const },
+  };
+  if (job.document === "invoice") {
+    await prisma.outboundInvoice.updateMany({ where, data });
+    return;
+  }
+  await prisma.outboundAdjustment.updateMany({ where, data });
 }
 
 async function resubmitInvoice(job: ResubmitJob): Promise<void> {
@@ -70,18 +60,36 @@ async function resubmitInvoice(job: ResubmitJob): Promise<void> {
     where: { id: BigInt(job.documentId), organization_id: BigInt(job.organizationId) },
     include: { legalEntity: true, branch: true },
   });
-  if (!row || !row.serial_number) throw new Error("Rejected invoice was not found.");
+  if (!row) throw new Error("Rejected invoice was not found.");
   if (Number(row.legal_entity_id) !== job.legalEntityId || row.branch.code !== job.branchCode) {
-    throw new Error("invoice does not match this job");
+    await rejectQueuedDocument(job, "invoice does not match this job");
+    return;
   }
   if (row.ramis_status === "cleared") return;
   if (row.ramis_status !== "queued" && row.ramis_status !== "rejected") {
-    throw new Error("invoice is not waiting for resubmit");
+    await rejectQueuedDocument(job, "invoice is not waiting for resubmit");
+    return;
+  }
+  let serialNumber: string;
+  try {
+    serialNumber = row.serial_number ?? (await allocateSerial(row.branch_id, row.invoice_date));
+  } catch (error) {
+    if (isTransient(error)) throw error;
+    const message = messageOf(error);
+    console.error("invoice-engine rejected", "invoice", job.documentId, message);
+    await rejectQueuedDocument(job, message);
+    return;
+  }
+  if (serialNumber !== row.serial_number) {
+    await prisma.outboundInvoice.update({
+      where: { id: row.id },
+      data: { serial_number: serialNumber },
+    });
   }
   const place = row.place_of_supply || row.branch.name;
   const payload: RamisInvoice = {
     header: {
-      serial_number: row.serial_number,
+      serial_number: serialNumber,
       erp_reference: row.erp_reference,
       invoice_date: row.invoice_date.toISOString().slice(0, 10),
       supply_date: row.supply_date.toISOString().slice(0, 10),
@@ -122,11 +130,13 @@ async function resubmitAdjustment(job: ResubmitJob): Promise<void> {
   });
   if (!row || !row.serial_number) throw new Error("Rejected note was not found.");
   if (Number(row.legal_entity_id) !== job.legalEntityId || row.branch.code !== job.branchCode) {
-    throw new Error("note does not match this job");
+    await rejectQueuedDocument(job, "note does not match this job");
+    return;
   }
   if (row.ramis_status === "cleared") return;
   if (row.ramis_status !== "queued" && row.ramis_status !== "rejected") {
-    throw new Error("note is not waiting for resubmit");
+    await rejectQueuedDocument(job, "note is not waiting for resubmit");
+    return;
   }
   const net = Number(row.adjusted_amount_exclusive_vat);
   const vat = Number(row.adjusted_vat_amount);
@@ -194,6 +204,16 @@ function line(
   };
 }
 
+async function allocateSerial(branchId: bigint, invoiceDate: Date): Promise<string> {
+  const day = invoiceDate.toISOString().slice(0, 10);
+  const result = await prisma.$queryRaw<{ serial: string }[]>`
+    select next_gazette_serial(${branchId}::bigint, ${day}::date) as serial
+  `;
+  const serial = result[0]?.serial;
+  if (!serial) throw new Error("next serial was not returned");
+  return serial;
+}
+
 async function finish(
   source: "invoice" | "adjustment",
   id: bigint,
@@ -201,8 +221,10 @@ async function finish(
   submit: () => Promise<{ token: string; clearedAt: string; hash: string }>,
 ): Promise<void> {
   const hash = payloadHash(payload);
+  let submitted = false;
   try {
     const clearance = await submit();
+    submitted = true;
     const data = {
       ramis_status: "cleared" as const,
       ramis_clearance_token: clearance.token,
@@ -213,11 +235,21 @@ async function finish(
     if (source === "invoice") await prisma.outboundInvoice.update({ where: { id }, data });
     else await prisma.outboundAdjustment.update({ where: { id }, data });
   } catch (error) {
-    if (error instanceof RamisRejection) {
-      const data = { ramis_status: "rejected" as const, error_message: error.message, ramis_payload_hash: hash };
+    const message = messageOf(error);
+    if (error instanceof RamisRejection || !submitted) {
+      const data = {
+        ramis_status: "rejected" as const,
+        error_message: message,
+        ...(error instanceof RamisRejection ? { ramis_payload_hash: hash } : {}),
+      };
       if (source === "invoice") await prisma.outboundInvoice.update({ where: { id }, data });
       else await prisma.outboundAdjustment.update({ where: { id }, data });
-      return;
+      if (error instanceof RamisRejection || !isTransient(error)) {
+        if (!(error instanceof RamisRejection)) {
+          console.error("invoice-engine rejected", source, id.toString(), message);
+        }
+        return;
+      }
     }
     throw error;
   }

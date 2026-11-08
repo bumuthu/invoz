@@ -45,7 +45,7 @@ export default function ExceptionsView({
     <>
       <PageHeader
         title="Exceptions"
-        description="Rejected Schedule 01, 04, and 07 documents. Open one row, correct it, and resubmit that document."
+        description="Rejected documents. A file that fails while it is read or submitted is listed here with the failure that stopped it."
       />
       <Card>
         {invoices.length === 0 ? (
@@ -77,11 +77,16 @@ export default function ExceptionsView({
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
-                      {(invoice.tags.length > 0 ? invoice.tags : [invoice.note ?? "Rejected"]).map((tag) => (
-                        <Chip key={tag} label={tag} size="small" color="error" />
-                      ))}
-                    </Stack>
+                    <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                      {invoice.note ?? "Rejected"}
+                    </Typography>
+                    {invoice.tags.length > 0 ? (
+                      <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75, mt: 0.75 }}>
+                        {invoice.tags.map((tag) => (
+                          <Chip key={tag} label={tag} size="small" color="error" />
+                        ))}
+                      </Stack>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}
@@ -92,7 +97,7 @@ export default function ExceptionsView({
       <Drawer anchor="right" open={Boolean(selected)} onClose={() => setOpenId(null)}>
         {selected ? (
           <Box sx={{ width: { xs: "100vw", sm: 420 }, p: 3 }}>
-            <Typography variant="h6">{selected.serial}</Typography>
+            <Typography variant="h6">{selected.serial === "—" ? selected.buyer : selected.serial}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
               Stored fields beside the validation failure.
             </Typography>

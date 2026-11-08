@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
-import { isSettledInvoiceKey, isTin, parseInvoiceJob, parseResubmitJob, readErpFieldMap, type InvoiceClass } from "@invoz/common";
+import { isSettledInvoiceKey, isTin, parseInvoiceJob, parseResubmitJob, readErpFieldMap, type InvoiceClass, type InvoiceJob } from "@invoz/common";
 import { prisma, type Prisma } from "@invoz/database";
 import type { SQSHandler } from "aws-lambda";
 import { alertRamisClearedCommitFailed } from "./alert";
+import { isTransient, isUniqueConflict, messageOf } from "./failure";
 import { invoicesFromCsv, type MappedInvoice } from "./invoices";
 import { processResubmit } from "./resubmit";
-import { idempotencyKey, RamisRejection, ramisPayload, submitInvoice, type Clearance } from "@invoz/common/ramis";
+import { idempotencyKey, ramisPayload, submitInvoice, type Clearance } from "@invoz/common/ramis";
 
 const pathTargets: Record<string, string> = {
   "header.invoice_date": "Invoice date",
@@ -23,15 +24,27 @@ const s3 = new S3Client({});
 
 type Entity = { id: number; organization_id: number; name: string; tin: string };
 
-export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>): Promise<void> {
+export async function processInvoiceJob(job: InvoiceJob): Promise<void> {
   if (job.source !== "s3" || !job.bucket || !job.objectKey) {
     throw new Error("s3 jobs require bucket and objectKey");
   }
-  const erpCode = await erpCodeForInvoice(job.organizationId, job.objectKey, job.legalEntityId);
-  if (!erpCode) return;
-  const entity = await legalEntity(job.legalEntityId, job.organizationId, job.objectKey);
-  if (!entity) return;
-  const csv = await readInvoice(job.bucket, job.objectKey);
+  const bucket = job.bucket;
+  const objectKey = job.objectKey;
+  try {
+    await publishInvoiceFile(job, bucket, objectKey);
+  } catch (error) {
+    if (isTransient(error)) throw error;
+    const message = messageOf(error);
+    console.error("invoice-engine rejected", objectKey, message);
+    await storeFileException(job, message);
+    await moveInvoice(bucket, objectKey, "rejected");
+  }
+}
+
+async function publishInvoiceFile(job: InvoiceJob, bucket: string, objectKey: string): Promise<void> {
+  const erpCode = await erpCodeForInvoice(job.organizationId, objectKey);
+  const entity = await legalEntity(job.legalEntityId, job.organizationId);
+  const csv = await readInvoice(bucket, objectKey);
   if (csv === undefined) return;
 
   const mappings = await mappingsForInvoice(erpCode);
@@ -44,10 +57,11 @@ export async function processInvoiceJob(job: ReturnType<typeof parseInvoiceJob>)
   const invoices = invoicesFromCsv(csv, mappings, branch?.code);
   let rejected = false;
   for (const invoice of invoices) {
-    const outcome = await submitMappedInvoice(entity, job.objectKey, job.branchId, invoice);
+    const outcome = await submitMappedInvoice(entity, objectKey, job.branchId, invoice);
     if (outcome === "rejected") rejected = true;
   }
-  await moveInvoice(job.bucket, job.objectKey, rejected ? "rejected" : "processed");
+  await clearFileException(entity.id, objectKey, job.branchId);
+  await moveInvoice(bucket, objectKey, rejected ? "rejected" : "processed");
 }
 
 const pollFile = /\/inbound\/poll-([a-z0-9_]+)-[^/]+\.csv$/;
@@ -65,11 +79,7 @@ async function mappingsForInvoice(
   });
 }
 
-async function erpCodeForInvoice(
-  organizationId: number,
-  objectKey: string,
-  legalEntityId: number,
-): Promise<string | null> {
+async function erpCodeForInvoice(organizationId: number, objectKey: string): Promise<string> {
   const polled = pollFile.exec(objectKey);
   if (polled) {
     const code = polled[1];
@@ -79,44 +89,22 @@ async function erpCodeForInvoice(
         erp_code: code,
         ingestion_mode: "poll",
       },
-      select: { erp_code: true, ingestion_mode: true, status: true },
+      select: { status: true },
     });
     if (connection?.status === "live") return code;
-    skipPublish({
-      reason: "erp connection is not live",
-      organizationId,
-      legalEntityId,
-      objectKey,
-      erpCode: code,
-      ingestionMode: "poll",
-      status: connection?.status ?? null,
-    });
-    return null;
+    throw new Error("erp connection is not live");
   }
   const sftp = await prisma.erpConnection.findMany({
     where: { organization_id: BigInt(organizationId), ingestion_mode: "sftp" },
-    select: { erp_code: true, ingestion_mode: true, status: true },
+    select: { erp_code: true, status: true },
   });
   if (sftp.length > 1) throw new Error("organization has more than one SFTP integration");
   const connection = sftp[0];
   if (connection?.status === "live") return connection.erp_code;
-  skipPublish({
-    reason: "erp connection is not live",
-    organizationId,
-    legalEntityId,
-    objectKey,
-    erpCode: connection?.erp_code ?? null,
-    ingestionMode: "sftp",
-    status: connection?.status ?? null,
-  });
-  return null;
+  throw new Error("erp connection is not live");
 }
 
-async function legalEntity(
-  legalEntityId: number,
-  organizationId: number,
-  objectKey: string,
-): Promise<Entity | null> {
+async function legalEntity(legalEntityId: number, organizationId: number): Promise<Entity> {
   const row = await prisma.legalEntity.findUnique({
     where: { id: BigInt(legalEntityId) },
     select: { id: true, organization_id: true, name: true, tin: true, ramis_enabled: true },
@@ -124,23 +112,9 @@ async function legalEntity(
   if (!row || Number(row.organization_id) !== organizationId) {
     throw new Error("legal entity is not in the organization on this job");
   }
-  if (!row.ramis_enabled) {
-    skipPublish({
-      reason: "ramis connection is disabled",
-      organizationId,
-      legalEntityId,
-      objectKey,
-      name: row.name,
-      tin: row.tin,
-    });
-    return null;
-  }
+  if (!row.ramis_enabled) throw new Error("ramis connection is disabled");
   if (!isTin(row.tin)) throw new Error("legal entity TIN must be 9 digits");
   return { id: Number(row.id), organization_id: Number(row.organization_id), name: row.name, tin: row.tin };
-}
-
-function skipPublish(detail: Record<string, unknown>): void {
-  console.log("invoice-engine skipped", JSON.stringify(detail));
 }
 
 async function submitMappedInvoice(
@@ -158,7 +132,13 @@ async function submitMappedInvoice(
   });
   if (!branch) throw new Error(`branch ${branchId ?? invoice.branchCode} is not in this legal entity`);
   if (branch.code !== invoice.branchCode) {
-    throw new Error(`branch code ${invoice.branchCode} does not match branch ${branch.id}`);
+    return saveRejection(
+      entity,
+      branch.id,
+      branch.name,
+      invoice,
+      `branch code ${invoice.branchCode} does not match branch ${branch.id}`,
+    );
   }
 
   let clearance: Clearance | undefined;
@@ -206,19 +186,6 @@ async function submitMappedInvoice(
     });
     return "cleared";
   } catch (error) {
-    if (error instanceof RamisRejection) {
-      const rejected = await prisma.outboundInvoice.findFirst({
-        where: { legal_entity_id: BigInt(entity.id), erp_reference: invoice.erpReference },
-        select: { id: true },
-      });
-      if (rejected) {
-        await prisma.outboundInvoice.update({
-          where: { id: rejected.id },
-          data: { ramis_status: "rejected", error_message: error.message },
-        });
-      }
-      return "rejected";
-    }
     if (clearance) {
       alertRamisClearedCommitFailed({
         organizationId: entity.organization_id,
@@ -230,9 +197,67 @@ async function submitMappedInvoice(
         clearedAt: clearance.clearedAt,
         error,
       });
+      throw error;
     }
-    throw error;
+    if (isTransient(error)) throw error;
+    return saveRejection(entity, branch.id, branch.name, invoice, messageOf(error));
   }
+}
+
+async function saveRejection(
+  entity: Entity,
+  branchId: bigint,
+  placeOfSupply: string,
+  invoice: MappedInvoice,
+  message: string,
+): Promise<"cleared" | "rejected"> {
+  const legalEntityId = BigInt(entity.id);
+  const existing = await prisma.outboundInvoice.findFirst({
+    where: { legal_entity_id: legalEntityId, erp_reference: invoice.erpReference },
+    select: { id: true, ramis_status: true },
+  });
+  if (existing?.ramis_status === "cleared") return "cleared";
+  if (existing) {
+    await prisma.outboundInvoice.update({
+      where: { id: existing.id },
+      data: { ramis_status: "rejected", error_message: message },
+    });
+    return "rejected";
+  }
+  const invoiceType = storedClass(invoice);
+  const hash = createHash("sha256").update(`reject\n${entity.id}\n${invoice.erpReference}`).digest("hex");
+  try {
+    await prisma.outboundInvoice.create({
+      data: {
+        organization_id: BigInt(entity.organization_id),
+        legal_entity_id: legalEntityId,
+        branch_id: branchId,
+        erp_reference: invoice.erpReference,
+        invoice_type: invoiceType,
+        invoice_date: new Date(invoice.invoiceDate),
+        supply_date: new Date(invoice.supplyDate),
+        customer_tin: invoice.buyerTin,
+        customer_name: invoice.buyerName,
+        place_of_supply: placeOfSupply,
+        currency: "LKR",
+        exchange_rate: "1.0000",
+        amount_exclusive_vat: invoice.netAmount,
+        vat_rate: invoiceType === "financial_services" ? "20.50" : invoiceType === "standard" ? "18.00" : "0.00",
+        vat_amount: invoice.vatAmount,
+        total_amount: invoice.totalAmount,
+        ramis_status: "rejected",
+        ramis_payload_hash: hash,
+        error_message: message,
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    await prisma.outboundInvoice.updateMany({
+      where: { legal_entity_id: legalEntityId, erp_reference: invoice.erpReference, ramis_status: { not: "cleared" } },
+      data: { ramis_status: "rejected", error_message: message },
+    });
+  }
+  return "rejected";
 }
 
 async function nextSerial(tx: Prisma.TransactionClient, branchId: bigint, invoiceDate: string): Promise<string> {
@@ -311,6 +336,97 @@ async function moveInvoice(bucket: string, key: string, folder: "processed" | "r
     }),
   );
   await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+function fileName(objectKey: string): string {
+  return objectKey.split("/").pop() || "invoice.csv";
+}
+
+function fileReference(objectKey: string, branchId?: number): string {
+  return `file:${branchId ?? "entity"}:${fileName(objectKey)}`;
+}
+
+async function storeFileException(job: InvoiceJob, message: string): Promise<void> {
+  if (!job.objectKey) throw new Error("s3 jobs require objectKey");
+  const row = await prisma.legalEntity.findUnique({
+    where: { id: BigInt(job.legalEntityId) },
+    select: { id: true, organization_id: true },
+  });
+  if (!row || Number(row.organization_id) !== job.organizationId) {
+    throw new Error("legal entity is not in the organization on this job");
+  }
+  const branchId = await branchForException(row.id, job.branchId);
+  const erpReference = fileReference(job.objectKey, job.branchId);
+  const name = fileName(job.objectKey);
+  const stored = message.startsWith(`${name}: `) ? message : `${name}: ${message}`;
+  const existing = await prisma.outboundInvoice.findFirst({
+    where: { legal_entity_id: row.id, erp_reference: erpReference },
+    select: { id: true, ramis_status: true },
+  });
+  if (existing?.ramis_status === "cleared") return;
+  if (existing) {
+    await prisma.outboundInvoice.update({
+      where: { id: existing.id },
+      data: { ramis_status: "rejected", error_message: stored },
+    });
+    return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const hash = createHash("sha256").update(`file-reject\n${row.id}\n${erpReference}`).digest("hex");
+  try {
+    await prisma.outboundInvoice.create({
+      data: {
+        organization_id: row.organization_id,
+        legal_entity_id: row.id,
+        branch_id: branchId,
+        erp_reference: erpReference,
+        invoice_date: new Date(today),
+        supply_date: new Date(today),
+        customer_tin: "",
+        customer_name: name,
+        amount_exclusive_vat: "0.00",
+        vat_amount: "0.00",
+        total_amount: "0.00",
+        ramis_status: "rejected",
+        ramis_payload_hash: hash,
+        error_message: stored,
+      },
+    });
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    await prisma.outboundInvoice.updateMany({
+      where: { legal_entity_id: row.id, erp_reference: erpReference, ramis_status: { not: "cleared" } },
+      data: { ramis_status: "rejected", error_message: stored },
+    });
+  }
+}
+
+async function branchForException(legalEntityId: bigint, requested?: number): Promise<bigint> {
+  if (requested) {
+    const branch = await prisma.branch.findFirst({
+      where: { id: BigInt(requested), legal_entity_id: legalEntityId },
+      select: { id: true },
+    });
+    if (branch) return branch.id;
+  }
+  const fallback = await prisma.branch.findFirst({
+    where: { legal_entity_id: legalEntityId },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  if (!fallback) throw new Error("legal entity has no branch");
+  return fallback.id;
+}
+
+async function clearFileException(legalEntityId: number, objectKey: string, branchId?: number): Promise<void> {
+  await prisma.outboundInvoice.deleteMany({
+    where: {
+      legal_entity_id: BigInt(legalEntityId),
+      erp_reference: fileReference(objectKey, branchId),
+      ramis_status: "rejected",
+      serial_number: null,
+    },
+  });
 }
 
 export const handler: SQSHandler = async (event) => {
