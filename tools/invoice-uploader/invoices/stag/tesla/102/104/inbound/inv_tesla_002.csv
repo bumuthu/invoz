@@ -1,0 +1,2 @@
+header.erp_reference,header.invoice_date,header.supply_date,purchaser.tin,purchaser.name,currency_summary.total_value_excluding_vat,currency_summary.total_vat_amount,header.invoice_type
+inv_tesla_002,2026-11-08,2026-11-08,178901234,Kandy Spice House,420000.00,75600.00,STANDARD_TAX_INVOICE

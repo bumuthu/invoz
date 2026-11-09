@@ -30,7 +30,10 @@ export async function processInvoiceJob(job: InvoiceJob): Promise<void> {
       await storeFileException(job, error.message);
       throw error;
     }
-    if (isTransient(error)) throw error;
+    if (isTransient(error)) {
+      console.error("invoice-engine retry", objectKey, messageOf(error));
+      throw error;
+    }
     const message = messageOf(error);
     console.error("invoice-engine rejected", objectKey, message);
     await storeFileException(job, message);
@@ -142,8 +145,9 @@ async function submitMappedInvoice(
   });
   if (!branch) throw new Error(`branch ${branchId ?? invoice.branchCode} is not in this legal entity`);
   if (branch.code !== invoice.branchCode) {
-    return saveRejection(
+    return rejectInvoice(
       entity,
+      objectKey,
       branch.id,
       branch.name,
       invoice,
@@ -181,7 +185,10 @@ async function submitMappedInvoice(
       },
       { timeout: 55_000, maxWait: 10_000 },
     );
-    if (prepared.outcome !== "submit") return prepared.outcome;
+    if (prepared.outcome !== "submit") {
+      console.error("invoice-engine skipped", objectKey, invoice.erpReference, `already ${prepared.outcome}`);
+      return prepared.outcome;
+    }
     serialNumber = prepared.serialNumber;
     clearance = await submitInvoice(prepared.payload, idempotencyKey(objectKey, invoice.erpReference));
     await prisma.outboundInvoice.update({
@@ -210,8 +217,20 @@ async function submitMappedInvoice(
       throw error;
     }
     if (isTransient(error)) throw error;
-    return saveRejection(entity, branch.id, branch.name, invoice, messageOf(error));
+    return rejectInvoice(entity, objectKey, branch.id, branch.name, invoice, messageOf(error));
   }
+}
+
+function rejectInvoice(
+  entity: Entity,
+  objectKey: string,
+  branchId: bigint,
+  placeOfSupply: string,
+  invoice: MappedInvoice,
+  message: string,
+): Promise<"cleared" | "rejected"> {
+  console.error("invoice-engine rejected", objectKey, invoice.erpReference, message);
+  return saveRejection(entity, branchId, placeOfSupply, invoice, message);
 }
 
 async function saveRejection(

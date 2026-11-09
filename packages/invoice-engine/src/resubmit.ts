@@ -245,11 +245,10 @@ async function finish(
       if (source === "invoice") await prisma.outboundInvoice.update({ where: { id }, data });
       else await prisma.outboundAdjustment.update({ where: { id }, data });
       if (error instanceof RamisRejection || !isTransient(error)) {
-        if (!(error instanceof RamisRejection)) {
-          console.error("invoice-engine rejected", source, id.toString(), message);
-        }
+        console.error("invoice-engine rejected", source, id.toString(), message);
         return;
       }
+      console.error("invoice-engine retry", source, id.toString(), message);
     }
     throw error;
   }

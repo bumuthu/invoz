@@ -143,7 +143,10 @@ export async function submitMappedAdjustment(
       },
       { timeout: 55_000, maxWait: 10_000 },
     );
-    if (prepared.outcome !== "submit") return prepared.outcome;
+    if (prepared.outcome !== "submit") {
+      console.error("invoice-engine skipped", objectKey, note.erpReference, `already ${prepared.outcome}`);
+      return prepared.outcome;
+    }
     serialNumber = prepared.serialNumber;
     clearance = await submitAdjustment(prepared.payload, idempotencyKey(objectKey, note.erpReference));
     await prisma.outboundAdjustment.update({
@@ -172,7 +175,9 @@ export async function submitMappedAdjustment(
       throw error;
     }
     if (error instanceof RetryLater || isTransient(error)) throw error;
-    await saveAdjustmentRejection(entity, branch.id, original.id, originalSerial, note, messageOf(error), serialNumber);
+    const message = messageOf(error);
+    console.error("invoice-engine rejected", objectKey, note.erpReference, message);
+    await saveAdjustmentRejection(entity, branch.id, original.id, originalSerial, note, message, serialNumber);
     return "rejected";
   }
 }

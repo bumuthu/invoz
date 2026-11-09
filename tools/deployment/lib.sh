@@ -5,9 +5,29 @@ DEPLOY_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$DEPLOY_DIR/../.." && pwd)
 BUILD_DIR="$DEPLOY_DIR/.build"
 
+# Assignments in .env are shell variables. Export them so npm and aws see API_CERTIFICATE_ARN.
+# An APP_ENV or AWS_REGION already set on the command line stays in force.
+if [[ -f "$DEPLOY_DIR/.env" ]]; then
+  preset_app_env="${APP_ENV:-}"
+  preset_region="${AWS_REGION:-}"
+  set -a
+  # shellcheck disable=SC1091
+  source "$DEPLOY_DIR/.env"
+  set +a
+  if [[ -n "$preset_app_env" ]]; then
+    APP_ENV="$preset_app_env"
+  fi
+  if [[ -n "$preset_region" ]]; then
+    AWS_REGION="$preset_region"
+  fi
+fi
+
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-ap-south-1}}"
 export AWS_REGION="$REGION"
 export AWS_DEFAULT_REGION="$REGION"
+if [[ -n "${APP_ENV:-}" ]]; then
+  export APP_ENV
+fi
 
 if [[ ! "${APP_ENV:-}" =~ ^(stag|prod)$ ]]; then
   echo "APP_ENV must be stag or prod" >&2

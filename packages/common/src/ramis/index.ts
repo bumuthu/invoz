@@ -185,11 +185,7 @@ export async function submitInvoice(payload: RamisInvoice, idempotency: string):
     }
     return { token: body.ramis_clearance_token, clearedAt: body.cleared_timestamp, hash: payloadHash(payload) };
   }
-  const message = body.message || `RAMIS returned HTTP ${response.status}`;
-  if (response.status >= 400 && response.status < 500) {
-    throw new RamisRejection(response.status, message);
-  }
-  throw new Error(message);
+  throw ramisFailure(baseUrl, response.status, responseText, body.message);
 }
 
 export async function submitAdjustment(payload: RamisAdjustment, idempotency: string): Promise<Clearance> {
@@ -224,9 +220,21 @@ export async function submitAdjustment(payload: RamisAdjustment, idempotency: st
       hash: payloadHash(payload),
     };
   }
-  const message = body.message || `RAMIS returned HTTP ${response.status}`;
-  if (response.status >= 400 && response.status < 500) throw new RamisRejection(response.status, message);
-  throw new Error(message);
+  throw ramisFailure(baseUrl, response.status, responseText, body.message);
+}
+
+function ramisFailure(baseUrl: string, status: number, responseText: string, bodyMessage: string | undefined): Error {
+  let host = baseUrl;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    // The configured URL is not absolute. Keep it in the log as written.
+  }
+  const detail = (bodyMessage || responseText).replace(/\s+/g, " ").trim().slice(0, 500) || "empty body";
+  const message = `RAMIS ${host} returned HTTP ${status}: ${detail}`;
+  console.error("ramis request failed", message);
+  if (status >= 400 && status < 500) return new RamisRejection(status, message);
+  return new Error(message);
 }
 
 function parseJson(text: string): unknown {
@@ -252,9 +260,10 @@ async function accessToken(baseUrl: string, clientId: string, secret: string): P
       client_secret: secret,
     }),
   });
-  const body = (await response.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; message?: string };
+  const responseText = await response.text();
+  const body = (parseJson(responseText) ?? {}) as { access_token?: string; expires_in?: number; message?: string };
   if (!response.ok || !body.access_token) {
-    throw new Error(body.message || `RAMIS token request failed with HTTP ${response.status}`);
+    throw ramisFailure(baseUrl, response.status, responseText, body.message);
   }
   tokenCache = {
     secret,
