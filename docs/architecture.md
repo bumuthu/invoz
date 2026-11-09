@@ -190,7 +190,7 @@ invoz
 | --- | --- | --- |
 | `landing-app` | 3002 | Public site. |
 | `portal-app` | 3000 | One organization, chosen from the signed-in user's membership. Overview, invoices, Schedule 02, field mapping, branches, users, subscription. Roles come from `@invoz/common`. |
-| `admin-app` | 3001 | Platform admin. |
+| `admin-app` | 3001 | Platform admin. One super admin onboards organizations and decides SFTP and polling requests. The screens are in [admin-app.md](admin-app.md). |
 
 `@invoz/common` is shared by the apps, the Lambda, and the seeder.
 
