@@ -12,6 +12,7 @@ import {
   type RamisInvoice,
 } from "@invoz/common/ramis";
 import { isTransient, messageOf } from "./failure";
+import { recordClearedInvoice } from "./usage";
 
 export async function processResubmit(job: ResubmitJob): Promise<void> {
   const blocked = await publishBlockReason(job);
@@ -120,7 +121,9 @@ async function resubmitInvoice(job: ResubmitJob): Promise<void> {
       ),
     ],
   };
-  await finish("invoice", row.id, payload, () => submitInvoice(payload, resubmitIdempotencyKey(payload)));
+  await finish("invoice", row.id, row.organization_id, payload, () =>
+    submitInvoice(payload, resubmitIdempotencyKey(payload)),
+  );
 }
 
 async function resubmitAdjustment(job: ResubmitJob): Promise<void> {
@@ -163,7 +166,9 @@ async function resubmitAdjustment(job: ResubmitJob): Promise<void> {
       adjusted_total_consideration: Number(row.adjusted_total_amount),
     },
   };
-  await finish("adjustment", row.id, payload, () => submitAdjustment(payload, resubmitIdempotencyKey(payload)));
+  await finish("adjustment", row.id, row.organization_id, payload, () =>
+    submitAdjustment(payload, resubmitIdempotencyKey(payload)),
+  );
 }
 
 function summary(
@@ -217,6 +222,7 @@ async function allocateSerial(branchId: bigint, invoiceDate: Date): Promise<stri
 async function finish(
   source: "invoice" | "adjustment",
   id: bigint,
+  organizationId: bigint,
   payload: unknown,
   submit: () => Promise<{ token: string; clearedAt: string; hash: string }>,
 ): Promise<void> {
@@ -225,15 +231,23 @@ async function finish(
   try {
     const clearance = await submit();
     submitted = true;
+    const clearedAt = new Date(clearance.clearedAt);
     const data = {
       ramis_status: "cleared" as const,
       ramis_clearance_token: clearance.token,
       ramis_payload_hash: clearance.hash,
-      cleared_at: new Date(clearance.clearedAt),
+      cleared_at: clearedAt,
       error_message: null,
     };
-    if (source === "invoice") await prisma.outboundInvoice.update({ where: { id }, data });
-    else await prisma.outboundAdjustment.update({ where: { id }, data });
+    await prisma.$transaction(async (tx) => {
+      const updated =
+        source === "invoice"
+          ? await tx.outboundInvoice.updateMany({ where: { id, ramis_status: { not: "cleared" } }, data })
+          : await tx.outboundAdjustment.updateMany({ where: { id, ramis_status: { not: "cleared" } }, data });
+      if (updated.count === 1 && source === "invoice") {
+        await recordClearedInvoice(tx, organizationId, clearedAt);
+      }
+    });
   } catch (error) {
     const message = messageOf(error);
     if (error instanceof RamisRejection || !submitted) {

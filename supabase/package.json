@@ -7,7 +7,8 @@
     "seed": "node --env-file=.env --import tsx scripts/seed.ts",
     "onboard": "node --env-file=.env --import tsx scripts/onboard.ts",
     "enable:sftp": "node --env-file=.env --import tsx scripts/enable-sftp.ts",
-    "enable:poll": "node --env-file=.env --import tsx scripts/enable-poll.ts"
+    "enable:poll": "node --env-file=.env --import tsx scripts/enable-poll.ts",
+    "create:admin": "node --env-file=.env --import tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "@invoz/common": "*",

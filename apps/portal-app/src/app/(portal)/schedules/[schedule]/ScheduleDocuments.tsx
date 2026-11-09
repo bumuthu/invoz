@@ -27,7 +27,7 @@ export default function ScheduleDocuments({
             No documents in this period.
           </Typography>
         ) : (
-          <InvoiceTable rows={invoices} />
+          <InvoiceTable rows={invoices} showDate />
         )}
       </Card>
     </>

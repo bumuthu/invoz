@@ -14,7 +14,7 @@ export default function PageData<T>({
   load: (search: string) => Promise<T>;
   children: (data: T) => ReactNode;
 }) {
-  const { search } = usePortalPath();
+  const { pathname, search } = usePortalPath();
   const [data, setData] = useState<T | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -51,6 +51,6 @@ export default function PageData<T>({
       </Typography>
     );
   }
-  if (!data) return <PageSkeleton />;
+  if (!data) return <PageSkeleton route={pathname} />;
   return children(data);
 }

@@ -21,6 +21,7 @@
     "onboard:sftp": "npm run provision:sftp-user -w @invoz/deployment --",
     "enable:sftp": "npm run enable:sftp -w @invoz/supabase --",
     "enable:poll": "npm run enable:poll -w @invoz/supabase --",
+    "admin:create": "npm run create:admin -w @invoz/supabase --",
     "provision": "npm run provision -w @invoz/deployment",
     "provision:ramis": "npm run provision:ramis -w @invoz/deployment",
     "provision:landing": "npm run provision:landing -w @invoz/deployment",

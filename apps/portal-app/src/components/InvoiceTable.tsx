@@ -14,7 +14,7 @@ import StatusChip from "@/components/StatusChip";
 import { navigate, usePortalPath } from "@/lib/portal-nav";
 import type { Invoice } from "@/lib/types";
 
-export default function InvoiceTable({ rows }: { rows: Invoice[] }) {
+export default function InvoiceTable({ rows, showDate = false }: { rows: Invoice[]; showDate?: boolean }) {
   const { search } = usePortalPath();
   const query = search ? `?${search}` : "";
   return (
@@ -23,6 +23,7 @@ export default function InvoiceTable({ rows }: { rows: Invoice[] }) {
         <TableHead>
           <TableRow>
             <TableCell>Serial</TableCell>
+            {showDate ? <TableCell>Date</TableCell> : null}
             <TableCell>Buyer</TableCell>
             <TableCell>Branch</TableCell>
             <TableCell>Amount</TableCell>
@@ -50,6 +51,7 @@ export default function InvoiceTable({ rows }: { rows: Invoice[] }) {
                   {invoice.kind}
                 </Typography>
               </TableCell>
+              {showDate ? <TableCell sx={{ whiteSpace: "nowrap" }}>{invoice.invoiceDate}</TableCell> : null}
               <TableCell>
                 <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
                   <Initials name={invoice.buyer} />

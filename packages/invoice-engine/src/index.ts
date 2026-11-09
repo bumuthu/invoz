@@ -10,6 +10,7 @@ import { parseCsv } from "./csv";
 import { RetryLater, isTransient, isUniqueConflict, messageOf } from "./failure";
 import { invoicesFromCsv, type MappedInvoice } from "./invoices";
 import { processResubmit } from "./resubmit";
+import { recordClearedInvoice } from "./usage";
 import { idempotencyKey, ramisPayload, submitInvoice, type Clearance } from "@invoz/common/ramis";
 
 const s3 = new S3Client({});
@@ -190,16 +191,23 @@ async function submitMappedInvoice(
       return prepared.outcome;
     }
     serialNumber = prepared.serialNumber;
-    clearance = await submitInvoice(prepared.payload, idempotencyKey(objectKey, invoice.erpReference));
-    await prisma.outboundInvoice.update({
-      where: { id: prepared.invoiceId },
-      data: {
-        ramis_status: "cleared",
-        ramis_clearance_token: clearance.token,
-        ramis_payload_hash: clearance.hash,
-        cleared_at: new Date(clearance.clearedAt),
-        error_message: null,
-      },
+    const accepted = await submitInvoice(prepared.payload, idempotencyKey(objectKey, invoice.erpReference));
+    clearance = accepted;
+    const clearedAt = new Date(accepted.clearedAt);
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.outboundInvoice.updateMany({
+        where: { id: prepared.invoiceId, ramis_status: { not: "cleared" } },
+        data: {
+          ramis_status: "cleared",
+          ramis_clearance_token: accepted.token,
+          ramis_payload_hash: accepted.hash,
+          cleared_at: clearedAt,
+          error_message: null,
+        },
+      });
+      if (updated.count === 1) {
+        await recordClearedInvoice(tx, BigInt(entity.organization_id), clearedAt);
+      }
     });
     return "cleared";
   } catch (error) {

@@ -57,6 +57,7 @@ export default function ExceptionsView({
             <TableHead>
               <TableRow>
                 <TableCell>Serial</TableCell>
+                <TableCell>Date</TableCell>
                 <TableCell>Buyer</TableCell>
                 <TableCell>Failure</TableCell>
               </TableRow>
@@ -70,6 +71,7 @@ export default function ExceptionsView({
                       {invoice.kind}
                     </Typography>
                   </TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>{invoice.invoiceDate}</TableCell>
                   <TableCell>
                     {invoice.buyer}
                     <Typography variant="caption" display="block" color="text.secondary">

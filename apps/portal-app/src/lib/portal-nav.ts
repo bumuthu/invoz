@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 export type PortalLocation = { pathname: string; search: string };
 
 const listeners = new Set<(path: PortalLocation) => void>();
+// Native history updates skip Next.js, so usePathname stays on the page that
+// was first rendered. Keep the latest client location for components that mount after a navigation.
+let current: PortalLocation | null = null;
 
 function readLocation(): PortalLocation {
   const search = window.location.search;
@@ -16,6 +19,7 @@ function readLocation(): PortalLocation {
 }
 
 function publish(path: PortalLocation) {
+  current = path;
   listeners.forEach((listener) => listener(path));
 }
 
@@ -56,10 +60,11 @@ if (typeof window !== "undefined") {
 export function usePortalPath(): PortalLocation {
   const pathname = usePathname();
   const search = useSearchParams().toString();
-  const [override, setOverride] = useState<PortalLocation | null>(null);
+  const [override, setOverride] = useState<PortalLocation | null>(current);
 
   useEffect(() => {
     listeners.add(setOverride);
+    if (current) setOverride(current);
     return () => {
       listeners.delete(setOverride);
     };

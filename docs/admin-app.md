@@ -1,14 +1,22 @@
 # Admin app
 
-The admin app is the platform console for onboarding customers. It runs at port 3001 from `apps/admin-app`. One super admin has every action. There is no permission matrix and no second admin account.
+The admin app is the platform console for onboarding customers. It runs at port 3001 from `apps/admin-app`. Accounts live in `admin_users`. Every account has full access. There is no permission matrix.
 
-The super admin is a Supabase Auth user whose email matches `ADMIN_EMAIL`. That user is not a member of a customer organization and does not appear in the portal. Customer data is read and written with Prisma on `DATABASE_URL`. Auth admin calls use the service role. `ADMIN_EMAIL`, `APP_ENV` (`stag` or `prod`), and `AWS_REGION` stay on the server.
+An admin account is not a Supabase Auth user and has no portal membership. The password is stored as a scrypt hash, the same form used for SFTP passwords. Customer owners are still created in Supabase Auth. Customer data is read and written with Prisma on `DATABASE_URL`. `APP_ENV` (`stag` or `prod`) and `AWS_REGION` stay on the server.
 
 `npm run onboard` and the SFTP and polling scripts still work. The admin app is the screen for the same database changes. It does not write a folder under `supabase/seeders/`.
 
 ## Sign-in
 
-The admin signs in with email and password. A session whose email does not match `ADMIN_EMAIL` is sent back to the login page. The app does not list, invite, or remove admins. Create the Auth user once in Supabase.
+The admin signs in with email and password. The session is an httpOnly cookie signed by the server. It is not a Supabase session.
+
+Create or replace an account from the repo root. The password is not written to a file.
+
+```bash
+npm run admin:create -- admin@invoz.lk 'choose-a-password'
+```
+
+The app does not list, invite, or remove admin accounts.
 
 ## Screens
 
@@ -77,7 +85,6 @@ Each table row is one legal entity joined to one ERP connection of its organizat
 | Mode | `ingestion_mode`: `sftp` or `poll` |
 | ERP, label | `erp_code`, `label` |
 | Status | `live` or `offline` |
-| Endpoint | poll `endpoint_url` |
 | Last polled, last error | poll columns |
 
 `api_secret` and `certificate_secret_arn` are not sent to the browser.

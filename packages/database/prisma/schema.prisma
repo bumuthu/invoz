@@ -379,6 +379,15 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model AdminUser {
+  id            BigInt   @id @default(autoincrement())
+  email         String   @unique(map: "admin_users_email_uidx")
+  password_hash String
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("admin_users")
+}
+
 model DemoRequest {
   id         BigInt   @id @default(autoincrement())
   name       String

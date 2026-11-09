@@ -95,9 +95,7 @@ function showsFilters(pathname: string) {
     pathname.startsWith("/invoices") ||
     pathname.startsWith("/schedules") ||
     pathname.startsWith("/exceptions") ||
-    pathname.startsWith("/audit") ||
-    pathname.startsWith("/ingestion") ||
-    pathname.startsWith("/setup/")
+    pathname.startsWith("/audit")
   );
 }
 

@@ -104,6 +104,7 @@ export default function ScheduleView({
                   <TableCell padding="checkbox" />
                   <TableCell>Supplier</TableCell>
                   <TableCell>Serial</TableCell>
+                  <TableCell>Date</TableCell>
                   <TableCell>VAT</TableCell>
                 </TableRow>
               </TableHead>
@@ -126,6 +127,7 @@ export default function ScheduleView({
                       </Typography>
                     </TableCell>
                     <TableCell>{row.serial}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>{row.invoiceDate}</TableCell>
                     <TableCell>{row.vat}</TableCell>
                   </TableRow>
                 ))}
